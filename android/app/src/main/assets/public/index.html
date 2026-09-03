@@ -212,7 +212,7 @@
   input[type=range]{width:150px; accent-color:var(--corn); -webkit-appearance:none; height:6px; border-radius:99px; background:var(--track)}
   input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; width:19px; height:19px; border-radius:50%;
     background:var(--glass-strong); border:1px solid var(--glass-high); box-shadow:var(--tab)}
-  .pill-btn{border:none; cursor:pointer; padding:8px 16px; border-radius:99px; font-size:12.5px; font-weight:700; color:#fff; background:var(--lettuce); box-shadow:var(--tab)}
+  .pill-btn{border:none; cursor:pointer; padding:8px 16px; border-radius:99px; font-size:12.5px; font-weight:700; color:#fff; background:var(--lettuce); box-shadow:var(--tab); position:relative; z-index:2}
   .dotg{width:8px; height:8px; border-radius:50%; background:var(--lettuce); box-shadow:0 0 0 4px var(--lettuce-soft)}
   /* 下拉 */
   .dropdown-set{display:none}
@@ -360,9 +360,9 @@
             <div class="set-card"><div class="set-ic">☁️</div><div><div class="set-n">数据同步</div><div class="set-s">上次同步 刚刚</div></div>
               <div class="right" style="display:flex;align-items:center;gap:10px"><span class="dotg"></span><button class="pill-btn" onclick="syncNow(this)">立即同步</button></div></div>
             <div class="set-card"><div class="set-ic">🚀</div><div><div class="set-n">UI 更新</div><div class="set-s">软件 1.1 · 界面 <b id="appVerLine" style="color:var(--ink)">同步中…</b></div></div>
-              <div class="right" style="display:flex;align-items:center;gap:8px"><span id="uiVerState" style="font-size:12px;color:var(--ink2)"></span><button class="pill-btn" id="uiRestartBtn" style="display:none" onclick="uiUpdateTap(this)">更新</button></div></div>
+              <div class="right" style="display:flex;align-items:center;gap:8px"><span id="uiVerState" style="font-size:12px;color:var(--ink2)"></span><button class="pill-btn" id="uiRestartBtn" style="display:none" data-act="upd" onclick="window.uiUpdateTap && window.uiUpdateTap(this)">更新</button></div></div>
             <div class="set-card"><div class="set-ic">🩺</div><div><div class="set-n">系统体检</div><div class="set-s">检查云 / 登录 / 桥回路 / AI</div></div>
-              <div class="right"><button class="pill-btn" id="hcBtn" onclick="healthTap(this)">一键体检</button></div></div>
+              <div class="right"><button class="pill-btn" id="hcBtn" data-act="hc" onclick="window.healthTap && window.healthTap(this)">一键体检</button></div></div>
           </div>
         </div>
       </div>
@@ -1033,16 +1033,17 @@
     if (hosted) document.body.setAttribute('data-appshell', 'on');   /* 真机：自动去壳全屏 */
     if (hosted){ setTimeout(function(){ window.emit('page-ready', {}); }, 200); }   /* 任何桥模式：就绪通知（统一初始化入口） */
     /* UI 更新状态卡（Kotlin 推送） */
-    function uiUpdateTap(btn){
+    window.uiUpdateTap = function(btn){
       btn.textContent = '正在更新…';
       btn.disabled = true;
       window.emit('ui-update', {});
-    }
-    function healthTap(btn){
+    };
+    window.healthTap = function(btn){
+      window.emit('trace', {msg: 'healthBtn tapped'});
       btn.textContent = '正在体检…';
       btn.disabled = true;
       window.emit('health-check', {});
-    }
+    };
     window.__healthDone = function(){
       var b = document.getElementById('hcBtn');
       if (b){ b.textContent = '一键体检'; b.disabled = false; }
@@ -1203,6 +1204,23 @@
       el.style.transform = '';
     }
   }
+  /* 诊断：全局点击捕获（capture）——任何点击都打点，判定点击是否到达页面层 */
+  document.addEventListener('click', function(e){
+    var t = e.target;
+    window.emit('trace', {msg: 'clickHit ' + ((t && t.tagName) || '?') + '.' + ((t && t.className) || '').toString().slice(0, 36)});
+  }, true);
+  /* 按钮 touch 驱动（touchstart 通道已验证可靠；touchend/click 在远程页面被吞） */
+  var lastBtnT = 0;
+  document.addEventListener('touchstart', function(e){
+    var t = e.target && e.target.closest ? e.target.closest('.pill-btn') : null;
+    if (!t) return;
+    var now = Date.now(); if (now - lastBtnT < 350) return; lastBtnT = now;
+    var act = t.getAttribute('data-act');
+    window.emit('trace', {msg: 'btnTouch ' + (act || '?')});
+    if (act === 'hc') window.healthTap && window.healthTap(t);
+    if (act === 'upd') window.uiUpdateTap && window.uiUpdateTap(t);
+  }, true);
+
   window.addEventListener('touchstart', swDown, {passive: true});
   window.addEventListener('touchmove', swMove, {passive: false});
   window.addEventListener('touchend', swUp);

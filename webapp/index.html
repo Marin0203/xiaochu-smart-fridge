@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>小厨 · 重构补齐版</title>
 <style>
   :root{
@@ -46,6 +46,20 @@
     box-shadow:0 30px 70px rgba(80,60,35,.28), 0 4px 14px rgba(80,60,35,.12), inset 0 0 0 1px rgba(255,255,255,.6)}
   .device::before{content:""; position:absolute; left:-2px; top:120px; width:3px; height:64px; border-radius:3px; background:rgba(120,95,60,.35)}
   .device::after{content:""; position:absolute; right:-2px; top:150px; width:3px; height:44px; border-radius:3px; background:rgba(120,95,60,.25)}
+  :root{--safe-t:0px; --safe-b:0px}
+  /* ---- App 全屏（Capacitor/原生桥自动启用）· 真适配：全部用系统安全区变量，机型无关 ---- */
+  body[data-appshell="on"]{display:block; height:100dvh; background:var(--bg); padding:0}
+  body[data-appshell="on"] .device{width:100%; max-width:100%; height:100dvh; padding:0; background:transparent; box-shadow:none}
+  body[data-appshell="on"] .device::before,
+  body[data-appshell="on"] .device::after,
+  body[data-appshell="on"] .notch,
+  body[data-appshell="on"] .homebar{display:none}
+  body[data-appshell="on"] .screen{height:100dvh; border-radius:0; box-shadow:none}
+  /* Capacitor WebView 视口默认已在系统栏之下：内容头部与详情页同款 44px，不再叠加安全区 */
+  body[data-appshell="on"] .topbar{padding:44px 18px 12px}
+  body[data-appshell="on"] .scroll{padding-bottom:calc(var(--safe-b) + 116px)}
+  body[data-appshell="on"] .nav{position:fixed; left:12px; right:12px; bottom:calc(var(--safe-b) + 12px)}
+  body[data-appshell="on"] .fab{position:fixed; right:22px; bottom:calc(var(--safe-b) + 92px)}
   .screen{position:relative; border-radius:46px; background:var(--bg); overflow:hidden;
     height:786px; display:flex; flex-direction:column; transition:background .5s ease;
     box-shadow:inset 0 0 0 1px rgba(0,0,0,.04)}
@@ -123,7 +137,7 @@
   .zbadge{font-size:10.5px; font-weight:600; color:var(--corn); background:var(--corn-soft); padding:2px 7px; border-radius:6px}
   .card .fresh{height:6px; border-radius:99px; background:var(--track); overflow:hidden}
   .card .fresh i{display:block; height:100%; border-radius:99px; background:var(--c); width:var(--w)}
-  .empty{text-align:center; padding:34px 0; color:var(--ink2); font-size:13px}
+  .empty{grid-column:1 / -1; text-align:center; padding:52px 0; color:var(--ink2); font-size:13px; line-height:1.9}
 
   /* 食谱 */
   .switch-line{display:flex; align-items:center; justify-content:space-between; margin-bottom:13px}
@@ -152,7 +166,7 @@
   .r-tag{font-size:11px; font-weight:600; color:var(--ink2); border:1px solid var(--line); padding:3px 9px; border-radius:8px; background:var(--glass)}
 
   /* 详情（右滑） */
-  #detail{position:absolute; inset:0; z-index:15; background:var(--bg); display:none; flex-direction:column;
+  #detail{position:absolute; inset:0; z-index:35; background:var(--bg); display:none; flex-direction:column;
     padding:0 18px; animation:slIn .3s cubic-bezier(.2,.8,.3,1)}
   #detail.on{display:flex}
   @keyframes slIn{from{opacity:0; transform:translateX(56px)} to{opacity:1; transform:none}}
@@ -192,13 +206,13 @@
   .set-ic{width:38px; height:38px; min-width:38px; border-radius:12px; background:var(--lettuce-soft);
     display:flex; align-items:center; justify-content:center; font-size:18px}
   .set-n{font-size:14px; font-weight:700}
-  .set-s{font-size:11.5px; color:var(--ink2); margin-top:2px}
-  .right{margin-left:auto}
+  .set-s{font-size:11.5px; color:var(--ink2); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .right{margin-left:auto; flex:none}
   .chev{color:var(--ink2); font-size:12px; transition:transform .25s ease}
   input[type=range]{width:150px; accent-color:var(--corn); -webkit-appearance:none; height:6px; border-radius:99px; background:var(--track)}
   input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; width:19px; height:19px; border-radius:50%;
     background:var(--glass-strong); border:1px solid var(--glass-high); box-shadow:var(--tab)}
-  .pill-btn{border:none; cursor:pointer; padding:8px 16px; border-radius:99px; font-size:12.5px; font-weight:700; color:#fff; background:var(--lettuce); box-shadow:var(--tab)}
+  .pill-btn{border:none; cursor:pointer; padding:8px 16px; border-radius:99px; font-size:12.5px; font-weight:700; color:#fff; background:var(--lettuce); box-shadow:var(--tab); position:relative; z-index:2}
   .dotg{width:8px; height:8px; border-radius:50%; background:var(--lettuce); box-shadow:0 0 0 4px var(--lettuce-soft)}
   /* 下拉 */
   .dropdown-set{display:none}
@@ -282,8 +296,8 @@
           <div class="t" id="hdT">库存</div>
         </div>
         <div class="acts">
-          <button class="circle-btn" id="btnSync" onclick="doSync(this)" title="同步库存">⟳</button>
-          <button class="circle-btn" id="btnRefresh" onclick="doRefresh(this)" style="display:none" title="刷新菜谱">⟳</button>
+          <button class="circle-btn" id="btnSync" onclick="doSync(this)" title="同步库存"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg></button>
+          <button class="circle-btn" id="btnRefresh" onclick="doRefresh(this)" style="display:none" title="刷新菜谱"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg></button>
         </div>
       </div>
       <div class="scroll">
@@ -338,11 +352,17 @@
             <div class="set-card"><div class="set-ic">🌙</div><div><div class="set-n">夜间模式</div><div class="set-s">深夜厨房 · 深底浅字</div></div>
               <div class="right"><label class="swt"><input type="checkbox" onchange="toggleNight()"><span class="tr"></span><span class="kn"></span></label></div></div>
             <div class="set-card"><div class="set-ic">⏰</div><div><div class="set-n">临期提醒</div><div class="set-s">提前多久提醒</div></div>
-              <div class="right"><input type="range" min="6" max="72" value="24" oninput="document.getElementById('remV').textContent=this.value+'h'"><span style="font-size:12px;color:var(--ink2);margin-left:8px" id="remV">24h</span></div></div>
+              <div class="right" style="display:flex;align-items:center;gap:10px">
+                <label class="swt"><input type="checkbox" id="remSw" disabled onchange="remToggle(this)"><span class="tr"></span><span class="kn"></span></label>
+                <input type="range" id="remRange" min="6" max="72" value="24" disabled oninput="remIv(this.value)" style="width:82px">
+                <span style="font-size:11px;color:var(--ink2);min-width:44px;text-align:right;opacity:.6" id="remV">…</span>
+              </div></div>
             <div class="set-card"><div class="set-ic">☁️</div><div><div class="set-n">数据同步</div><div class="set-s">上次同步 刚刚</div></div>
               <div class="right" style="display:flex;align-items:center;gap:10px"><span class="dotg"></span><button class="pill-btn" onclick="syncNow(this)">立即同步</button></div></div>
-            <div class="set-card"><div class="set-ic">🩺</div><div><div class="set-n">系统体检</div><div class="set-s">上次体检：全部健康</div></div>
-              <div class="right"><button class="pill-btn" onclick="toast('体检完成 · 全部健康 ✓')">一键体检</button></div></div>
+            <div class="set-card"><div class="set-ic">🚀</div><div><div class="set-n">UI 更新</div><div class="set-s">软件 1.1 · 界面 <b id="appVerLine" style="color:var(--ink)">同步中…</b></div></div>
+              <div class="right" style="display:flex;align-items:center;gap:8px"><span id="uiVerState" style="font-size:12px;color:var(--ink2)"></span><button class="pill-btn" id="uiRestartBtn" style="display:none" data-act="upd" onclick="window.uiUpdateTap && window.uiUpdateTap(this)">更新</button></div></div>
+            <div class="set-card"><div class="set-ic">🩺</div><div><div class="set-n">系统体检</div><div class="set-s">检查云 / 登录 / 桥回路 / AI</div></div>
+              <div class="right"><button class="pill-btn" id="hcBtn" data-act="hc" onclick="window.healthTap && window.healthTap(this)">一键体检</button></div></div>
           </div>
         </div>
       </div>
@@ -357,10 +377,20 @@
       <div id="detailScroll"></div>
     </div>
 
+    <!-- 系统体检报告 -->
+    <div class="overlay" id="ovHealth" onclick="if(event.target===this)this.classList.remove('show')">
+      <div class="modal">
+        <div class="m-head"><div class="m-title">· 系统体检报告</div><button class="m-close" onclick="document.getElementById('ovHealth').classList.remove('show')">✕</button></div>
+        <div id="hcReport" style="font-size:12.5px;line-height:2.1;font-weight:600;white-space:pre-line"></div>
+      </div>
+    </div>
+
     <!-- 编辑浮窗 -->
     <div class="overlay" id="ovEdit" onclick="if(event.target===this)closeEdit()">
       <div class="modal">
-        <div class="m-head"><div class="m-title">编辑 · <span id="eName"></span></div><button class="m-close" onclick="closeEdit()">✕</button></div>
+        <div class="m-head"><div class="m-title">编辑 · <span id="eName"></span>
+          <button class="circle-btn" style="width:26px;height:26px;font-size:12px;vertical-align:middle" onclick="refreshFresh()" title="刷新保质期（今天算新买）">⟳</button>
+        </div><button class="m-close" onclick="closeEdit()">✕</button></div>
         <span class="zbadge" id="eTag" style="margin:0 0 4px"></span>
         <div class="m-label">分区</div>
         <div class="chips" id="eZone"></div>
@@ -409,7 +439,7 @@
 
 <script>
   var ZONES = {chill:'冷藏', freeze:'冷冻', ambient:'常温'};
-  var CATS = ['全部','蔬菜','水果','乳品','肉蛋','海鲜','主食','调味','速冻'];
+  var CATS = ['全部','谷薯','蔬菜','水果','畜禽','水产','蛋类','乳豆坚果','油盐调料'];
   /* 三套图标：A emoji 一对一词典（含同义词）/ B 线描 / C 贴纸 */
   var EMO = {
     /* 蔬菜（含同义词/别名） */
@@ -427,9 +457,18 @@
     /* 调味 */
     '盐':'🧂','食盐':'🧂','糖':'🍬','白糖':'🍬','砂糖':'🍬','冰糖':'🍬','酱油':'🫙','生抽':'🫙','老抽':'🫙','醋':'🫙','陈醋':'🫙','香醋':'🫙','蚝油':'🫙','料酒':'🫙','豆瓣酱':'🌶️','辣酱':'🌶️','番茄酱':'🥫','沙拉酱':'🥫','香油':'🫙','麻油':'🫙','胡椒粉':'⚫','胡椒':'⚫','花椒':'⚫','八角':'⚫','大料':'⚫','鸡精':'⚫','味精':'⚫','辣椒粉':'🌶️','孜然粉':'🌶️',
     /* 饮料 & 其他 */
-    '可乐':'🥤','雪碧':'🥤','咖啡':'☕','茶':'🍵','茶叶':'🍵','啤酒':'🍺','果汁':'🧃','橙汁':'🧃','蜂蜜':'🍯','红枣':'🫘','枸杞':'🫘','花生':'🥜','瓜子':'🌰','核桃':'🌰','坚果':'🥜','薯片':'🍟',
+    '可乐':'🥤','雪碧':'🥤','咖啡':'☕','茶':'🍵','茶叶':'🍵','啤酒':'🍺','果汁':'🧃','橙汁':'🧃','蜂蜜':'🍯','红枣':'🫘','枸杞':'🫘','花生':'🥜','瓜子':'🌻','核桃':'🌰','坚果':'🥜','薯片':'🍟',
     /* 补充：热带/奇异食材 & 硬壳类 */
-    '榴莲':'🍈','菠萝蜜':'🍈','山竹':'🫐','牛油果':'🥑','火龙果':'🍈','百香果':'🍋','椰子':'🥥','荔枝':'🫘','杨梅':'🫐','桑葚':'🫐','龙虾':'🦞','波士顿龙虾':'🦞','帝王蟹':'🦀','梭子蟹':'🦀','海参':'🦪','鲍鱼':'🦪','海胆':'🦔','花甲':'🦪','蛏子':'🦪','海蜇':'🦑','海带结':'🌿'
+    '榴莲':'🍈','菠萝蜜':'🍈','山竹':'🫐','牛油果':'🥑','火龙果':'🍈','百香果':'🍋','椰子':'🥥','荔枝':'🫘','杨梅':'🫐','桑葚':'🫐','龙虾':'🦞','波士顿龙虾':'🦞','帝王蟹':'🦀','梭子蟹':'🦀','海参':'🦪','鲍鱼':'🦪','海胆':'🦔','花甲':'🦪','蛏子':'🦪','海蜇':'🦑','海带结':'🌿',
+    /* ============ 扩充段 2026-08-30（官方 emoji 枚举 + 中餐语义自建） ============ */
+    /* 食材补全 */
+    '西蓝花':'🥦','西兰花':'🥦','青花菜':'🥦','秋葵':'🌱','芦笋':'🌱','空心菜':'🥬','苋菜':'🥬','紫甘蓝':'🟣','羽衣甘蓝':'🥬','冰菜':'🥬','苦菊':'🥬','韭黄':'🌿','芥蓝':'🥬','香椿':'🌿','茼蒿':'🥬','娃娃菜':'🥬','马齿苋':'🌿','豌豆苗':'🌱','豆苗':'🌱','红薯叶':'🌿','折耳根':'🌱','荸荠':'🌰','菱角':'🌰','茭白':'🌱','百合':'🌱','甜菜根':'🥕','紫薯':'🍠',
+    '青柠':'🍋','西柚':'🍊','血橙':'🍊','沃柑':'🍊','丑橘':'🍊','金桔':'🍊','冬枣':'🍒','枇杷':'🍑','杏':'🍑','杏子':'🍑','杨桃':'🍈','莲雾':'🍈','释迦':'🍈','酸梅':'🍒','乌梅':'🍒','话梅':'🍒','山楂':'🍒','沙棘':'🍑','罗汉果':'🍈','陈皮':'🍊',
+    '板栗':'🌰','榛子':'🌰','开心果':'🥜','腰果':'🥜','碧根果':'🌰','夏威夷果':'🌰','杏仁':'🌰','果脯':'🍑','果干':'🍑',
+    '薄荷':'🌿','紫苏':'🌿','迷迭香':'🌿','百里香':'🌿','罗勒':'🌿','九层塔':'🌿','香茅':'🌿','柠檬草':'🌿','咖喱叶':'🌿','泰椒':'🌶️','小米辣':'🌶️','杭椒':'🌶️','螺丝椒':'🌶️','线椒':'🌶️','美人椒':'🌶️','泡椒':'🫙','剁椒':'🫙','野山椒':'🌶️','黄椒':'🌶️','墨西哥椒':'🌶️','黑胡椒':'⚫','白胡椒':'⚫','花椒粉':'🌶️','五香粉':'🫙','十三香':'🫙','咖喱粉':'🫙','孜然':'🫙','肉桂':'🪵','桂皮':'🪵','香叶':'🌿','草果':'🌰','甘草':'🌿','党参':'🌿','黄芪':'🌿','当归':'🌿','枸杞子':'🍒','红枣干':'🍒',
+    /* 常见菜名直映射（fetchEmoDish 最长命中优先） */
+    '宫保鸡丁':'🍗','辣子鸡':'🍗','口水鸡':'🍗','白切鸡':'🍗','可乐鸡翅':'🍗','炸鸡':'🍗','烤鸭':'🦆','啤酒鸭':'🦆','盐水鸭':'🦆','水煮鱼':'🐟','酸菜鱼':'🐟','清蒸鱼':'🐟','红烧鱼':'🐟','剁椒鱼头':'🐟','西湖醋鱼':'🐟','红烧带鱼':'🐟','清蒸鲈鱼':'🐟','干锅鱼':'🐟','鱼香肉丝':'🥩','鱼香茄子':'🍆','回锅肉':'🥩','红烧肉':'🥩','梅菜扣肉':'🥩','咕咾肉':'🥩','菠萝咕咾肉':'🥩','糖醋里脊':'🥩','青椒肉丝':'🌶️','麻婆豆腐':'🍮','红烧豆腐':'🍮','酿豆腐':'🍮','家常豆腐':'🍮','番茄豆腐':'🍅','地三鲜':'🍆','干煸豆角':'🫘','干煸四季豆':'🫘','酸辣土豆丝':'🥔','醋溜土豆丝':'🥔','红烧茄子':'🍆','蒜蓉茄子':'🍆','蒸茄子':'🍆','白灼虾':'🦐','油焖大虾':'🦐','蒜蓉粉丝虾':'🦐','龙井虾仁':'🦐','油爆虾':'🦐','虾仁滑蛋':'🦐','炒鱿鱼':'🦑','辣炒鱿鱼':'🦑','番茄炒蛋':'🍅','西红柿炒鸡蛋':'🍅','西红柿蛋汤':'🍅','紫菜蛋花汤':'🥚','皮蛋瘦肉粥':'🥚','蒜蓉生菜':'🥬','蚝油生菜':'🥬','蒜蓉西兰花':'🥦','清炒时蔬':'🥬','凉拌黄瓜':'🥒','拍黄瓜':'🥒','凉拌白菜心':'🥬','凉拌木耳':'🍄','拌三丝':'🥕','上汤娃娃菜':'🥬','玉米浓汤':'🌽','南瓜浓汤':'🎃','酸辣汤':'🍲','番茄牛腩煲':'🍅','土豆炖牛肉':'🥔','萝卜炖牛腩':'🥕','红烧牛腩':'🥩','咖喱牛腩':'🍛','咖喱鸡':'🍛','可乐鸡':'🍗','烤鸡':'🍗','笋干老鸭煲':'🦆','板栗烧鸡':'🍗','口水鸡':'🍗','手撕鸡':'🍗','蛋炒饭':'🍚','扬州炒饭':'🍚','炒饭':'🍚','炒河粉':'🍜','炒米粉':'🍜','牛肉面':'🍜','红烧牛肉面':'🍜','兰州拉面':'🍜','炸酱面':'🍜','担担面':'🍜','热干面':'🍜','重庆小面':'🍜','刀削面':'🍜','葱油拌面':'🍜','凉面':'🍜','拌面':'🍜','鲜虾云吞面':'🍜','小笼包':'🥟','生煎包':'🥟','煎饺':'🥟','锅贴':'🥟','葱油饼':'🫓','手抓饼':'🫓','煎饼果子':'🫓','鸡蛋饼':'🫓','韭菜盒子':'🥟','烧麦':'🥟','烧卖':'🥟','虾饺':'🥟','肠粉':'🍜','粿条':'🍜','螺蛳粉':'🍜','酸辣粉':'🍜','米线':'🍜','过桥米线':'🍜','桂林米粉':'🍜','干捞粉':'🍜','馄饨':'🥟','云吞':'🥟','饺子':'🥟','水饺':'🥟','汤圆':'🍡','元宵':'🍡','粽子':'🍙','年糕':'🍡','糍粑':'🍡','重阳糕':'🍡','发糕':'🍡','粥':'🥣','小米粥':'🥣','八宝粥':'🥣','银耳羹':'🍧','红豆沙':'🍧','绿豆沙':'🍧','冰粉':'🍧','杨枝甘露':'🥭','西米露':'🥭','龟苓膏':'🍮','双皮奶':'🍮','姜撞奶':'🍮','布丁':'🍮','蛋糕':'🍰','生日蛋糕':'🎂','纸杯蛋糕':'🧁','蛋挞':'🥧','饼干':'🍪','曲奇':'🍪','雪饼':'🍪','马卡龙':'🍰','泡芙':'🧁','华夫饼':'🧇','松饼':'🥞','可丽饼':'🥞','甜甜圈':'🍩','冰淇淋':'🍨','雪糕':'🍦','冰棍':'🍡','奶茶':'🧋','珍珠奶茶':'🧋','柠檬茶':'🍋','金桔柠檬':'🍋','水果茶':'🍹','气泡水':'🥤','苏打水':'🥤','拿铁':'☕','美式咖啡':'☕','卡布奇诺':'☕','摩卡':'☕','气泡酒':'🥂','红酒':'🍷','白酒':'🍶','黄酒':'🍶','米酒':'🍶','梅子酒':'🍶','清酒':'🍶','啤酒':'🍺','生啤':'🍺','鸡尾酒':'🍸','威士忌':'🥃','白兰地':'🥃','伏特加':'🥃','朗姆酒':'🥃','红酒':'🍷','香槟':'🥂',
+    '披萨':'🍕','意面':'🍝','意大利面':'🍝','牛排':'🥩','西冷牛排':'🥩','菲力牛排':'🥩','战斧牛排':'🥩','汉堡':'🍔','薯条':'🍟','炸薯条':'🍟','烤翅':'🍗','鸡翅':'🍗','鸡米花':'🍗','鸡块':'🍗','炸鸡':'🍗','全家桶':'🍗','寿司':'🍣','刺身':'🐟','三文鱼刺身':'🐟','味噌汤':'🍲','天妇罗':'🍤','大阪烧':'🥞','章鱼小丸子':'🐙','饭团':'🍙','便当':'🍱','关东煮':'🍢','烤串':'🍢','撸串':'🍢','串串香':'🍢','烧烤':'🍖','烤羊肉串':'🍖','烤牛肉串':'🍖','烤茄子':'🍆','烤玉米':'🌽','烤面筋':'🍢','麻辣烫':'🌶️','冒菜':'🌶️','串串香':'🍢','火锅':'🍲','清汤锅':'🍲','鸳鸯锅':'🍲','九宫格火锅':'🍲','香锅':'🌶️','干锅':'🌶️','干锅花菜':'🌶️','干锅土豆':'🥔','钵钵鸡':'🍗','冷锅串串':'🍢','毛血旺':'🌶️','水煮肉片':'🥩','酸菜':'🥬','酸菜白肉':'🥩','酸菜炖粉条':'🥬','杀猪菜':'🥩','东北乱炖':'🥘','大乱炖':'🥘','铁锅炖':'🥘','炖菜':'🥘','煲仔饭':'🍚','腊味煲仔饭':'🍚','砂锅粥':'🥣','生滚粥':'🥣','艇仔粥':'🥣','及第粥':'🥣','烧鹅':'🦆','叉烧':'🥩','叉烧包':'🥟','菠萝包':'🍞','蛋挞':'🥧','老婆饼':'🥧','凤梨酥':'🥧','蛋黄酥':'🥧','月饼':'🥮','鲜花饼':'🥮','青团':'🍡','茶点':'🍵','早点':'🥟','宵夜':'🍜','夜宵':'🍜'
   };
   /* 未收录食材按尾字/特征智能兜底（命中率≈9 成） */
   var EMO_SUF = [['椒','🌶️'],['菇','🍄'],['瓜','🍉'],['豆','🫘'],['肉','🥩'],['奶','🥛'],['鱼','🐟'],['虾','🦐'],['蟹','🦀'],['贝','🦪'],['果','🍎'],['菜','🥬'],['蛋','🥚'],['梨','🍐'],['桃','🍑'],['莓','🍓'],['柚','🍊'],['橘','🍊'],['橙','🍊'],['榴','🍈'],['龙','🦞'],['椰','🥥'],['菇','🍄']];
@@ -438,7 +477,23 @@
     for (var i = 0; i < EMO_SUF.length; i++){ if (n.indexOf(EMO_SUF[i][0]) >= 0) return EMO_SUF[i][1]; }
     return EMO_CAT[tag] || '🥬';
   }
-  var EMO_CAT = {蔬菜:'🥬',水果:'🍊',乳品:'🥛',肉蛋:'🥩',海鲜:'🦐',主食:'🍚',调味:'🧂',速冻:'🧊'};
+  /* 菜名 emoji：取菜名里"最长命中"的食材（主料优先），无则 🍲 */
+  function fetchEmoDish(title){
+    var best = null, bestLen = 0;
+    for (var k in EMO){
+      if (title.indexOf(k) >= 0 && k.length > bestLen){ best = k; bestLen = k.length; }
+    }
+    return best ? EMO[best] : '🍲';
+  }
+  /* 菜品图标：跟随 iconSet（A=emoji / B=首字磁贴 / C=贴纸），与食材一致 */
+  function dishIcon(r){
+    var e = fetchEmoDish(r.n) || '🍲';
+    if (iconSet === 'a') return '<span style="font-size:24px">' + e + '</span>';
+    if (iconSet === 'b') return '<span style="width:34px;height:34px;border-radius:50%;background:var(--lettuce-soft);border:1px solid var(--lettuce);color:var(--lettuce);font-weight:800;font-size:16px;display:flex;align-items:center;justify-content:center">' + (r.n || '菜').charAt(0) + '</span>';
+    var s = STICK.veg;
+    return '<span style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:linear-gradient(155deg,' + s[0] + ',' + s[1] + ');box-shadow:inset 0 2px 4px rgba(255,255,255,.35), 0 3px 8px rgba(97,76,50,.15);font-size:19px">' + e + '</span>';
+  }
+  var EMO_CAT = {谷薯:'🍚',蔬菜:'🥬',水果:'🍊',畜禽:'🥩',水产:'🦐',蛋类:'🥚',乳豆坚果:'🥛',油盐调料:'🧂'};
   var STICK = {veg:['#C7E0B4','#93BE74'], fru:['#F7D9A8','#EFB263'], meat:['#F3C3B0','#E59B82'], dairy:['#F8EBD3','#E8CFA0'], froz:['#D3E4F2','#A9C7DE']};
   var DATA = {
     chill: [
@@ -484,13 +539,23 @@
     var s = STICK[it.k] || STICK.veg;
     return '<span style="width:34px;height:34px;display:flex;align-items:center;justify-content:center;border-radius:14px;background:linear-gradient(155deg,' + s[0] + ',' + s[1] + ');box-shadow:inset 0 2px 4px rgba(255,255,255,.35), 0 3px 8px rgba(97,76,50,.15);font-size:18px">' + fetchEmo(it.n, it.tag) + '</span>';
   }
-  function visible(){ return DATA[curZone].filter(function(it){ return !curCat || it.tag === curCat; }); }
-  function cardHtml(it, i){
-    return '<div class="card" style="animation-delay:' + (i * 40) + 'ms" onclick="openEditItem(' + DATA[curZone].indexOf(it) + ')">' +
+  /* 跨区查看：curCat 时汇总三区；否则当前区 */
+  function visible(){
+    if (!curCat) return DATA[curZone].map(function(it){ return {it: it, z: curZone}; });
+    var all = [];
+    Object.keys(DATA).forEach(function(z){
+      DATA[z].forEach(function(it){ if (it.tag === curCat) all.push({it: it, z: z}); });
+    });
+    return all;
+  }
+  function cardHtml(x, i){
+    var it = x.it, src = x.z;
+    return '<div class="card" style="animation-delay:' + (i * 40) + 'ms" onclick="openEditItem(\'' + src + '\',' + DATA[src].indexOf(it) + ')">' +
       '<div class="r1"><div class="tile">' + iconOf(it) + '</div>' +
       '<div class="nm">' + it.n + '</div><div class="qt">' + it.q + ' ' + it.u + '</div></div>' +
-      '<div class="r2">' + (curCat ? '<span class="zbadge">' + ZONES[it.zone || curZone] + '</span>' : '') +
-      '<span style="margin-left:6px">' + it.note + '</span></div>' +
+      '<div class="r2">' + (curCat ? '<span class="zbadge">' + ZONES[src] + '</span>' : '') +
+      '<span style="margin-left:6px">' + it.note + '</span>' +
+      (it.days != null ? '<span style="color:var(--ink2)">· 剩 ' + it.days + ' 天</span>' : '') + '</div>' +
       '<div class="fresh" style="--c:' + it.c + ';--w:' + it.w + '%"><i></i></div></div>';
   }
   function renderZone(){
@@ -503,14 +568,24 @@
       ? '<div class="cross-note"><span>🌏 跨区查看 ·「' + curCat + '」</span><button onclick="pickCat(\'全部\')">退出筛选</button></div>'
       : '';
   }
-  function banner(){
-    var today = new Date().toDateString();
+  /* 横幅 = 真实临期数据（days<=1 计数；关闭后当日不再提醒） */
+  function refreshBanner(){
     var rec = JSON.parse(localStorage.getItem('xcRemind') || '{}');
-    if (rec.date === today && rec.closed) return;
-    var n = 1;
-    $('bannerBox').innerHTML = '<div class="banner" id="banner"><div class="dot"></div>' + n + ' 件食材将在 24 小时内到期 · 建议今晚吃掉 🥢' +
-      '<button onclick="dismissBanner()" style="margin-left:auto;border:none;background:none;color:var(--corn);font-size:16px;cursor:pointer" title="今日不再提醒">✕</button></div>';
+    if (rec.date === new Date().toDateString() && rec.closed){ return; }
+    var expire = 0;
+    Object.keys(DATA).forEach(function(z){
+      DATA[z].forEach(function(it){
+        if (it.days != null && it.days <= 1) expire++;
+      });
+    });
+    if (expire > 0){
+      $('bannerBox').innerHTML = '<div class="banner" id="banner"><div class="dot"></div>' + expire + ' 件食材将在 24 小时内到期 · 建议今晚吃掉 🥢' +
+        '<button onclick="dismissBanner()" style="margin-left:auto;border:none;background:none;color:var(--corn);font-size:16px;cursor:pointer" title="今日不再提醒">✕</button></div>';
+    } else {
+      $('bannerBox').innerHTML = '';
+    }
   }
+  function banner(){ refreshBanner(); }
   function dismissBanner(){
     localStorage.setItem('xcRemind', JSON.stringify({date: new Date().toDateString(), closed: true}));
     var b = $('banner'); if (b) b.remove();
@@ -519,8 +594,7 @@
   function setZone(el){
     curZone = el.dataset.z;
     document.querySelectorAll('#cap .tab').forEach(function(t){ t.classList.remove('on'); });
-    el.classList.add('on'); renderZone();
-    toast('已切换到「' + ZONES[curZone] + '」');
+    el.classList.add('on'); renderZone();   /* 点击/滑动切换均静默 */
   }
   function toggleFilter(){ $('fw').classList.toggle('open'); if ($('fw').classList.contains('open')) renderFilter(); }
   function renderFilter(){
@@ -557,9 +631,13 @@
 
   function swOn(){ return !!document.querySelector('#p-recipe .swt input').checked; }
   function renderRecipes(){
+    if (!RECIPES.length){
+      $('rlist').innerHTML = '<div style="text-align:center;padding:46px 0;color:var(--ink2);font-size:13px">⏳ DeepSeek 正在为你定制菜谱…</div>';
+      return;
+    }
     $('rlist').innerHTML = RECIPES.map(function(r, i){
       return '<div class="r-card" style="animation-delay:' + (i * 60) + 'ms" onclick="openDetail(' + i + ')">' +
-        '<div class="r-head"><div class="emo">' + r.e + '</div>' +
+        '<div class="r-head"><div class="emo">' + dishIcon(r) + '</div>' +
         '<div class="rm"><div class="rn">' + r.n + '</div><div class="rt">⏱ ' + r.t + '</div>' +
         '<div class="r-tags">' + r.tags.map(function(x){ return '<span class="r-tag">' + x + '</span>'; }).join('') + '</div></div>' +
         (r.b && swOn() ? '<span class="r-badge">临期优先</span>' : '') + '<span class="r-arrow">›</span></div></div>';
@@ -613,6 +691,7 @@
     btn.classList.add('on');
     closeWraps();
     renderZone();
+    renderRecipes();   /* 菜品图标跟随方案切换 */
     toast('图标已切换 · ' + names[iconSet]);
   }
   function syncNow(btn){
@@ -628,9 +707,22 @@
 
   /* 编辑浮窗：数量自由输入（一位小数）· 空白退出 · 扣除/删除分离 */
   function npm(v){ var x = parseFloat(v); return isNaN(x) ? null : Math.round(x * 10) / 10; }
-  function openEditItem(realIdx){
-    var it = DATA[curZone][realIdx];
-    eId = realIdx; eQ = it.q; eZ = curZone; eU = it.u;
+  var eSrc = 'chill';   /* 编辑对象的源分区（跨区打开时 ≠ curZone） */
+  var eItId = null;     /* 云 id：回灌后按 id 重新定位，防止索引失效 */
+  function resolveItem(){
+    if (eItId == null) return null;
+    var arr = DATA[eSrc];
+    var idx = arr.findIndex(function(x){ return x.id === eItId; });
+    if (idx < 0) return null;
+    eId = idx;
+    return arr[idx];
+  }
+  function openEditItem(src, realIdx){
+    eSrc = src; eId = realIdx;
+    editOpenAt = Date.now();
+    var it = DATA[src][realIdx];
+    eItId = (it && it.id != null) ? it.id : null;
+    eZ = src; eU = it.u;
     $('eName').textContent = it.n;
     $('eTag').textContent = it.tag;
     $('eQtyV').value = it.q;
@@ -640,37 +732,65 @@
     buildChips('eUnit', ['个','盒','袋','克','瓶','颗','块'], eU, function(v){ eU = v; });
     $('ovEdit').classList.add('show');
   }
+  /* 编辑浮窗：事件委托一次性绑定，点击即响应（无时间窗防抖——防抖窗曾导致"第一次点击被吞"） */
+  var editOpenAt = 0;
   function buildChips(boxId, list, cur, pick){
     var box = $(boxId); box.innerHTML = '';
     list.forEach(function(v){
       var b = document.createElement('button');
       b.className = 'chip' + (v === cur ? ' on' : '');
       b.textContent = v;
-      b.onclick = function(){ pick(v); buildChips(boxId, list, v, pick); };
+      b.setAttribute('data-val', v);
       box.appendChild(b);
     });
+    box.onclick = function(ev){
+      var t = ev.target;
+      if (!t || !t.closest || !t.closest('.chip')) return;
+      var key = t.closest('.chip').getAttribute('data-val');
+      Array.prototype.forEach.call(box.children, function(c){ c.classList.remove('on'); });
+      t.closest('.chip').classList.add('on');
+      pick(key);
+      if (window.emit) window.emit('trace', {msg: 'chipPick ' + boxId + '=' + key});
+    };
   }
   function closeEdit(){ $('ovEdit').classList.remove('show'); }
   function eQtySave(v){
-    var it = DATA[curZone][eId]; if (!it) return;
-    var x = npm(v); if (x !== null){ it.q = Math.max(0.1, x); it.u = eU; }
+    var it = resolveItem(); if (!it) { toast('该食材已不在库存 🌿'); closeEdit(); return; }
+    var x = npm(v);
+    if (x === 0){                                  /* 减到 0 → 自动移出库存 */
+      if (it.id != null){ window.emit('edit-delete', {id: it.id, remove: true}); }
+      DATA[eSrc].splice(eId, 1);
+      toast('已移出库存 · ' + it.n + ' 🗑');
+      renderZone();
+      return;
+    }
+    if (x !== null){ it.q = Math.max(0, x); it.u = eU; }
     toast('已保存 · ' + it.n + ' ' + it.q + ' ' + it.u);
     renderZone();
   }
+  function refreshFresh(){
+    var it = resolveItem(); if (!it) return;
+    if (it.id != null){ window.emit('edit-fresh', {id: it.id}); }
+    toast('保质期已刷新：今天算新买 ✓ 记得早点吃掉 🥬');
+  }
   function eQtyStep(d){
-    var it = DATA[curZone][eId]; if (!it) return;
-    it.q = Math.max(0.1, Math.round((it.q + d) * 10) / 10);
+    var it = resolveItem(); if (!it) { toast('该食材已不在库存 🌿'); closeEdit(); return; }
+    it.q = Math.max(0, Math.round((it.q + d) * 10) / 10);   /* 允许减到 0 → 保存时自动删除 */
     $('eQtyV').value = it.q;
     renderZone();
   }
   function eQtyDone(){
-    var it = DATA[curZone][eId];
+    if (window.emit) window.emit('trace', {msg: 'save zone=' + eZ + ' src=' + eSrc});
+    var it = resolveItem();
     if (it){
-      var x = npm($('eQtyV').value); if (x !== null) it.q = Math.max(0.1, x);
+      var x = npm($('eQtyV').value);
+      if (x === 0){ doDelete(); return; }          /* 减到 0 → 完成即删除 */
+      if (x !== null) it.q = Math.max(0, x);
       it.u = eU;
-      if (eZ !== curZone){
-        it.zone = eZ; DATA[eZ].push(it); DATA[curZone].splice(eId, 1);
-        setZoneAt(eZ);
+      if (it.id != null){ window.emit('edit-save', {id: it.id, qty: it.q, unit: it.u, zone: eZ}); }
+      if (eZ !== eSrc){
+        it.zone = eZ; DATA[eZ].push(it); DATA[eSrc].splice(eId, 1);
+        if (curCat) renderZone(); else setZoneAt(eZ);
         toast('已搬去「' + ZONES[eZ] + '」· ' + it.n + ' ' + it.q + ' ' + it.u);
       } else {
         renderZone();
@@ -682,8 +802,9 @@
     closeEdit();
   }
   function doDelete(){
-    var it = DATA[curZone][eId]; if (!it) return;
-    DATA[curZone].splice(eId, 1);
+    var it = resolveItem(); if (!it) { toast('该食材已不在库存 🌿'); closeEdit(); return; }
+    if (it.id != null){ window.emit('edit-delete', {id: it.id, remove: true}); }
+    DATA[eSrc].splice(eId, 1);
     toast('已删除 · ' + it.n + ' 🗑');
     closeEdit(); renderZone();
   }
@@ -698,57 +819,96 @@
   function openAdd(){
     addItems = [];
     $('aiText').value = ''; $('aiList').innerHTML = '';
+    if (window.bridgeMode !== 'demo'){ window.emit('sync', {}); }   /* 录入前先拉最新云端，避免同步冲突 */
     var b = $('addMainBtn'); b.textContent = '识别'; b.setAttribute('onclick', 'aiParseNow()');
     $('ovAdd').classList.add('show');
   }
   function closeAdd(){ $('ovAdd').classList.remove('show'); }
+  /* DS 识别结果回调（桥返回 {ok, items[{name,qty,unit,cat,zone}]}）→ 复用可编辑行渲染 */
+  window.onAiParse = function(res){
+    if (!res || !res.ok){
+      $('aiList').innerHTML = '<div style="font-size:12px;color:var(--ink2)">' + ((res && res.error) || '识别失败') + '</div>';
+      return;
+    }
+    renderAddItems(res.items || []);
+  };
+  function renderAddItems(items){
+    addItems = items;
+    $('aiList').innerHTML = addItems.map(function(x, i){
+      return '<div style="padding:8px 0;border-bottom:.5px solid var(--line)">' +
+        '<div style="display:flex;align-items:center;gap:6px">' +
+        '<input class="num" id="an' + i + '" value="' + x.name + '" style="flex:1;text-align:left;font-weight:700" oninput="onNameIn(' + i + ',this.value)">' +
+        '<input class="num" id="aq' + i + '" value="' + x.qty + '" inputmode="decimal" style="width:52px">' +
+        '<input class="num" id="au' + i + '" value="' + x.unit + '" style="width:44px">' +
+        '<button class="m-close" style="width:20px;height:20px;font-size:10px" onclick="this.parentNode.parentNode.style.display=\'none\'">✕</button></div>' +
+        '<div style="display:flex;align-items:center;gap:6px;margin-top:7px">' +
+        '<span id="at' + i + '" style="font-size:11px;color:var(--corn);font-weight:700">' + (x.cat || '蔬菜') + '</span><span style="flex:1"></span>' +
+        '<button class="chip' + ((x.zone || 'chill') === 'chill' ? ' on' : '') + '" style="padding:3px 10px;font-size:11.5px" onclick="onZoneIn(' + i + ',\'chill\',this)">冷藏</button>' +
+        '<button class="chip' + ((x.zone || 'chill') === 'freeze' ? ' on' : '') + '" style="padding:3px 10px;font-size:11.5px" onclick="onZoneIn(' + i + ',\'freeze\',this)">冷冻</button>' +
+        '<button class="chip' + ((x.zone || 'chill') === 'ambient' ? ' on' : '') + '" style="padding:3px 10px;font-size:11.5px" onclick="onZoneIn(' + i + ',\'ambient\',this)">常温</button>' +
+        '</div></div>';
+    }).join('');
+    var b = $('addMainBtn'); b.textContent = '添加'; b.setAttribute('onclick', 'addConfirm()');
+  }
   function aiParseNow(){
     var text = $('aiText').value.trim();
     if (!text){ toast('先输入一句话 🌿'); return; }
-    $('aiList').innerHTML = '<div style="font-size:12px;color:var(--ink2)">⏳ AI 识别中…</div>';
-    setTimeout(function(){
-      addItems = localParse(text);
-      $('aiList').innerHTML = addItems.map(function(x, i){
-        return '<div style="padding:8px 0;border-bottom:.5px solid var(--line)">' +
-          '<div style="display:flex;align-items:center;gap:6px">' +
-          '<input class="num" id="an' + i + '" value="' + x.name + '" style="flex:1;text-align:left;font-weight:700" oninput="onNameIn(' + i + ',this.value)">' +
-          '<input class="num" id="aq' + i + '" value="' + x.qty + '" inputmode="decimal" style="width:52px">' +
-          '<input class="num" id="au' + i + '" value="' + x.unit + '" style="width:44px">' +
-          '<button class="m-close" style="width:20px;height:20px;font-size:10px" onclick="this.parentNode.parentNode.style.display=\'none\'">✕</button></div>' +
-          '<div style="display:flex;align-items:center;gap:6px;margin-top:7px">' +
-          '<span id="at' + i + '" style="font-size:11px;color:var(--corn);font-weight:700">' + x.cat + '</span><span style="flex:1"></span>' +
-          '<button class="chip' + (x.zone === 'chill' ? ' on' : '') + '" style="padding:3px 10px;font-size:11.5px" onclick="onZoneIn(' + i + ',\'chill\',this)">冷藏</button>' +
-          '<button class="chip' + (x.zone === 'freeze' ? ' on' : '') + '" style="padding:3px 10px;font-size:11.5px" onclick="onZoneIn(' + i + ',\'freeze\',this)">冷冻</button>' +
-          '<button class="chip' + (x.zone === 'ambient' ? ' on' : '') + '" style="padding:3px 10px;font-size:11.5px" onclick="onZoneIn(' + i + ',\'ambient\',this)">常温</button>' +
-          '</div></div>';
-      }).join('');
-      var b = $('addMainBtn'); b.textContent = '添加'; b.setAttribute('onclick', 'addConfirm()');
-    }, 700);
+    $('aiList').innerHTML = '<div style="font-size:12px;color:var(--ink2)">⏳ DeepSeek 识别中…</div>';
+    if (window.bridgeMode === 'demo'){
+      /* 浏览器演示：规则引擎兜底（真机走 DeepSeek） */
+      setTimeout(function(){ window.onAiParse({ok: true, items: localParse(text)}); }, 700);
+    } else {
+      window.emit('ai-parse', {text: text});   /* 桥：真 DeepSeek */
+    }
   }
-  /* 规则猜料（演示版；真机由 DeepSeek 返回分类，此为兜底） */
+  /* 规则猜料（演示版；真机由 DeepSeek 返回分类，此为兜底）—— 宝塔 8 类对齐 */
   function guessTag(n){
     var FRU = ['苹果','梨','橙','橘','柚','柠檬','莓','葡萄','提子','香蕉','芒果','榴莲','菠萝','桃','樱桃','猕猴桃','奇异果','山楂','柿子','石榴','枣','枸杞','西瓜','哈密瓜','甜瓜'];
     if (FRU.some(function(k){ return n.indexOf(k) >= 0; })) return '水果';
-    if (/椒|菇|菜|豆|茄|芹|韭|蒜|姜|葱|藕|薯|卜|笋|苗|芽|瓜|番茄|西红柿|玉米|豆腐|山药|南瓜|冬瓜|苦瓜|丝瓜|莲藕|菌|海带|皮蛋|.子/.test(n)) return '蔬菜';
-    if (/肉|排骨|鸡|鸭|鹅|蛋|火腿|香肠|培根|牛|羊|猪/.test(n)) return '肉蛋';
-    if (/鱼|虾|蟹|贝|蛤|蛏|鱿|章|海参|生蚝|鲍|龙虾/.test(n)) return '海鲜';
-    if (/奶|酪|芝士|黄油|奶油|酸奶/.test(n)) return '乳品';
-    if (/米|面|粉|包|饺|馒|馄饨|年糕|汤圆|粽子|麦/.test(n)) return '主食';
-    if (/盐|糖|酱|醋|油|料酒|胡椒|花椒|八角|蚝|味精|鸡精|孜然|咖喱/.test(n)) return '调味';
-    if (/可乐|雪碧|咖啡|茶|啤|果汁|橙汁/.test(n)) return '调味';
+    if (/椒|菇|菜|豆|茄|芹|韭|蒜|姜|葱|藕|卜|笋|苗|芽|瓜|番茄|西红柿|莲藕|菌|海带|皮蛋|.子/.test(n)) return '蔬菜';
+    if (/蛋|皮蛋|松花蛋|咸鸭蛋/.test(n)) return '蛋类';
+    if (/肉|排骨|鸡|鸭|鹅|火腿|香肠|培根|牛|羊|猪/.test(n)) return '畜禽';
+    if (/鱼|虾|蟹|贝|蛤|蛏|鱿|章|海参|生蚝|鲍|龙虾/.test(n)) return '水产';
+    if (/奶|酪|芝士|黄油|奶油|酸奶|豆腐|豆干|腐竹|花生|核桃|杏仁|瓜子/.test(n)) return '乳豆坚果';
+    if (/米|面|粉|包|饺|馒|馄饨|年糕|汤圆|粽子|麦|土豆|薯|山药|芋|玉米/.test(n)) return '谷薯';
+    if (/盐|糖|酱|醋|油|料酒|胡椒|花椒|八角|蚝|味精|鸡精|孜然|咖喱/.test(n)) return '油盐调料';
+    if (/可乐|雪碧|咖啡|茶|啤|果汁|橙汁/.test(n)) return '油盐调料';
     return '蔬菜';
   }
-  function tagKey(t){ return {蔬菜:'veg',水果:'fru',乳品:'dairy',肉蛋:'meat',海鲜:'froz',主食:'base',调味:'cond',速冻:'froz'}[t] || 'veg'; }
+  function tagKey(t){ return {蔬菜:'veg',水果:'fru',蛋类:'dairy',畜禽:'meat',水产:'froz',谷薯:'base',乳豆坚果:'dairy',油盐调料:'cond'}[t] || 'veg'; }
+  /* 中文数量/量词解析（"三杯奶茶和四瓶可乐" → 奶茶×3杯 / 可乐×4瓶） */
+  var CN_NUM = {一:1, 两:2, 二:2, 三:3, 四:4, 五:5, 六:6, 七:7, 八:8, 九:9, 半:0.5};
+  var CN_UNITS_J = '个|盒|杯|瓶|袋|克|颗|块|把|条|罐|斤|两|勺|份|包|根|听|升|毫升|箱|板|节|颗';
+  function cnNum(s){
+    if (!s) return null;
+    if (/^[\d.]+$/.test(s)) return parseFloat(s);
+    if (CN_NUM[s]) return CN_NUM[s];
+    if (s.indexOf('十') >= 0){
+      var a = s.split('十');
+      var t = a[0] ? (CN_NUM[a[0]] || 1) : 1;
+      var o = a[1] ? (CN_NUM[a[1]] || 0) : 0;
+      return t * 10 + o;
+    }
+    return null;
+  }
+  function parseItem(p){
+    p = p.replace(/\s+/g, '');
+    if (!p) return null;
+    var m1 = p.match(new RegExp('^(半|[\\d.]+|[一二两三四五六七八九十]+)(' + CN_UNITS_J + ')(.+)$'));
+    if (m1){ var n1 = cnNum(m1[1]); if (n1 !== null) return {name: m1[3], qty: n1, unit: m1[2]}; }
+    var m2 = p.match(new RegExp('^(.+?)(半|[\\d.]+|[一二两三四五六七八九十]+)(' + CN_UNITS_J + ')$'));
+    if (m2){ var n2 = cnNum(m2[2]); if (n2 !== null) return {name: m2[1], qty: n2, unit: m2[3]}; }
+    var nm = p.match(/[\u4e00-\u9fa5A-Za-z]+/);
+    if (!nm) return null;
+    return {name: nm[0], qty: 1, unit: '个'};
+  }
   function localParse(text){
     var out = [];
     text.split(/[，,、和\s]+/).filter(Boolean).forEach(function(p){
-      var nm = p.match(/[\u4e00-\u9fa5A-Za-z]+/);
-      var name = nm ? nm[0] : p;
-      var nums = p.match(/\d+(?:\.\d+)?/);
-      var qty = nums ? parseFloat(nums[0]) : 1;
-      var um = p.match(/(个|盒|袋|克|瓶|颗|块|把|条|罐|斤|两|勺)/);
-      var unit = (um ? um[1] : '个');
-      out.push({name: name, qty: qty, unit: unit, cat: guessTag(name), zone: guessZone(guessTag(name))});
+      var it = parseItem(p);
+      if (!it) return;
+      var cat = guessTag(it.name);
+      out.push({name: it.name, qty: it.qty, unit: it.unit, cat: cat, zone: guessZone(it.name, cat)});
     });
     return out;
   }
@@ -756,10 +916,13 @@
     addItems[i].cat = guessTag(v.trim());
     var t = $('at' + i); if (t) t.textContent = addItems[i].cat;
   }
-  /* 分区智能分配：调味/主食→常温，肉蛋/海鲜→冷冻，其余→冷藏 */
-  function guessZone(tag){
-    return (tag === '调味' || tag === '主食') ? 'ambient'
-      : (tag === '肉蛋' || tag === '海鲜') ? 'freeze' : 'chill';
+  /* 分区智能分配（保鲜表 v1：与 DS prompt 同规则；葱蒜薯芋→常温，根茎/叶菜/鲜肉→冷藏，冷冻品→冷冻） */
+  var RM_TAGS = ['调味','主食','零食','干货'];
+  function guessZone(name, tag){
+    if (/土豆|洋葱|大蒜|蒜|葱|姜|红薯|紫薯|芋头|芋|生姜|香芋/.test(name || '')) return 'ambient';
+    if (RM_TAGS.indexOf(tag) >= 0) return 'ambient';
+    if (/冻肉|冻虾|冻鱼|冰淇淋|冻饺|速冻|冷冻/.test(name || '')) return 'freeze';
+    return 'chill';
   }
   function onZoneIn(i, z, btn){
     addItems[i].zone = z;
@@ -776,6 +939,7 @@
       var zone = x.zone || 'chill';
       var it = {n: name, q: qty, u: unit, tag: tag, k: tagKey(tag), zone: zone, w: 100, c: '#5FA45C', note: '很新鲜'};
       DATA[zone].unshift(it);
+      if (it.id == null){ window.emit('add', {name: it.n, qty: it.q, unit: it.u, zone: zone, tag: tag}); }
       added++;
     });
     closeAdd(); renderZone();
@@ -786,23 +950,12 @@
   function openDetail(i){
     curDetail = i; var r = RECIPES[i];
     $('detail').classList.add('on');
-    var h = '<div class="d-hero"><div class="emo">' + r.e + '</div>' +
+    var h = '<div class="d-hero"><div class="emo">' + dishIcon(r) + '</div>' +
       '<div><div class="d-name">' + r.n + '</div><div class="d-meta">⏱ ' + r.t + '</div></div>' +
       '<div class="d-right">' + (r.b && swOn() ? '<span class="r-badge">临期优先</span>' : '') +
       '<button class="copy-btn" onclick="toast(\'菜名已复制 ✓ 去抖音搜「' + r.n + '」\')">📋 复制菜名</button></div></div>' +
       '<div style="font-size:12px;font-weight:700;color:var(--ink2);margin:0 0 6px">制作步骤</div>' +
-      r.steps.map(function(s, j){ return '<div class="step"><div class="sn">' + (j + 1) + '</div><div class="st">' + s + '</div></div>'; }).join('') +
-      '<div style="font-size:12px;font-weight:700;color:var(--ink2);margin:12px 0 6px">扣除用料 · 已吃扣库存</div>';
-    r.ing.forEach(function(x, j){
-      h += '<div class="ingline"><div><div class="nm">' + x.n + '</div><div class="ct">默认用量</div></div>' +
-        '<div style="display:flex;gap:5px;align-items:center">' +
-        '<button class="circle-btn" style="width:30px;height:30px;font-size:11px" onclick="ingQty(' + j + ',-1)">−1</button>' +
-        '<button class="circle-btn" style="width:30px;height:30px;font-size:10px" onclick="ingQty(' + j + ',-0.1)">−.1</button>' +
-        '<input class="num" id="iv' + j + '" value="' + x.b + '" inputmode="decimal" style="width:56px" onchange="ingQtyIn(' + j + ',this.value)">' +
-        '<button class="circle-btn" style="width:30px;height:30px;font-size:10px" onclick="ingQty(' + j + ',0.1)">+.1</button>' +
-        '<button class="circle-btn" style="width:30px;height:30px;font-size:11px" onclick="ingQty(' + j + ',1)">+1</button></div></div>';
-    });
-    h += '<button class="deduct" onclick="doDeduct()">🍽 扣除「' + r.n + '」用料并出库</button>';
+      r.steps.map(function(s, j){ return '<div class="step"><div class="sn">' + (j + 1) + '</div><div class="st">' + s + '</div></div>'; }).join('');
     $('detailScroll').innerHTML = h;
   }
   function closeDetail(){ $('detail').classList.remove('on'); }
@@ -817,12 +970,14 @@
     x.b = Math.max(0, Math.round(n * 10) / 10);
     $('iv' + j).value = x.b;
   }
-  /* 演示级联动：扣除真实写入本地库存（真机由桥落库后 setData 回灌） */
+  /* 演示级+桥双写：扣除真实写入本地 + 发桥事件（Kotlin 落库后 setData 回灌覆盖） */
   function doDeduct(){
     var r = RECIPES[curDetail];
     var used = [];
+    var ded = [];
     r.ing.forEach(function(x){
       if (x.b <= 0) return;
+      ded.push({name: x.n, qty: x.b, unit: x.u});
       Object.keys(DATA).some(function(z){
         var idx = DATA[z].findIndex(function(it){ return it.n === x.n; });
         if (idx >= 0){
@@ -835,6 +990,7 @@
         return false;
       });
     });
+    if (ded.length){ window.emit('deduct', {items: ded}); }
     renderZone();
     toast(used.length ? '已扣除：' + used.join(' · ') + ' ✓' : '库存中没有对应用料 🤔');
     closeDetail();
@@ -845,45 +1001,147 @@
     var t = $('toast'); t.textContent = msg; t.classList.add('show');
     clearTimeout(tt); tt = setTimeout(function(){ t.classList.remove('show'); }, 2200);
   }
+  /* 临期提醒：开关 + 滑块已滑过部分绿色 */
+  function remPaint(v){
+    var r = $('remRange'); if (!r) return;
+    var min = +r.min, max = +r.max;
+    var p = ((+v - min) / (max - min)) * 100;
+    r.style.background = 'linear-gradient(90deg, var(--lettuce) ' + p + '%, var(--track) ' + p + '%)';
+  }
+  function remIv(v){
+    $('remV').textContent = v + ' 小时';
+    remPaint(v);
+    remindChanged();
+  }
+  function remToggle(el){
+    $('remRange').disabled = !el.checked;
+    $('remRange').style.opacity = el.checked ? '' : '.4';
+    remindChanged();
+  }
+  function remindChanged(){
+    if (window.bridgeMode !== 'demo'){
+      window.emit('reminder-settings', {enabled: $('remSw').checked, hours: +$('remRange').value});
+    }
+  }
+  remPaint('24');
+
   /* ============ 桥适配层（Capacitor FridgeNative 优先 / AndroidBridge 兼容 / 浏览器静默） ============ */
   (function(){
     var F = null;
     try { if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.FridgeNative) F = window.Capacitor.Plugins.FridgeNative; } catch(e){}
+    var hosted = !!(F || window.AndroidBridge);
+    if (hosted) document.body.setAttribute('data-appshell', 'on');   /* 真机：自动去壳全屏 */
+    if (hosted){ setTimeout(function(){ window.emit('page-ready', {}); }, 200); }   /* 任何桥模式：就绪通知（统一初始化入口） */
+    /* UI 更新状态卡（Kotlin 推送） */
+    window.uiUpdateTap = function(btn){
+      btn.textContent = '正在更新…';
+      btn.disabled = true;
+      window.emit('ui-update', {});
+    };
+    window.healthTap = function(btn){
+      window.emit('trace', {msg: 'healthBtn tapped'});
+      btn.textContent = '正在体检…';
+      btn.disabled = true;
+      window.emit('health-check', {});
+    };
+    window.__healthDone = function(){
+      var b = document.getElementById('hcBtn');
+      if (b){ b.textContent = '一键体检'; b.disabled = false; }
+    };
+    window.setUiUpdate = function(d){
+      try {
+        var state = document.getElementById('uiVerState');
+        var btn = document.getElementById('uiRestartBtn');
+        var verLine = document.getElementById('appVerLine');
+        if (verLine && d && d.ver) verLine.textContent = 'v' + d.ver;
+        if (!d || !d.ver) return;
+        state.textContent = d.state === 'new' ? '有新版本！' : '✅ 已是最新（云同步）';
+        if (btn) btn.style.display = d.state === 'new' ? '' : 'none';
+      } catch(e){}
+    };
     window.bridgeMode = F ? 'capacitor' : (window.AndroidBridge ? 'android' : 'demo');
     window.emit = function(type, payload){
       var json = JSON.stringify(payload || {});
+      if (window.AndroidBridge){ try { window.AndroidBridge.onEvent(type, json); } catch(e){} return; }
       if (F){ try { F.receiveEvent({type: type, payload: json}); } catch(e){} return; }
-      if (window.AndroidBridge){ try { window.AndroidBridge.onEvent(type, json); } catch(e){} }
     };
-    window.setData = function(json){
+    window.setData = function(data){
       try {
-        var d = JSON.parse(json);
+        var d = (typeof data === 'string') ? JSON.parse(data) : data;   /* 兼容对象/字符串两种注入 */
         if (d.inv) DATA = invToDemo(d.inv);
         if (d.iconSet) iconSet = d.iconSet;
+        var rl = d.recipes;                                   /* 菜谱以桥数据为准：数组 或 序号键对象 {1:{…},2:{…}}（契约 D-30） */
+        if (rl && !Array.isArray(rl)){
+          rl = Object.keys(rl).sort(function(a, b){ return (+a) - (+b); }).map(function(k){ return rl[k]; });
+        }
+        if (rl && rl.length){
+          RECIPES = rl.map(function(r){
+            return {n: r.name || r.n, t: r.time || r.t || '', e: r.emoji || r.e || '🍲',
+                    b: (r.badge != null ? r.badge : (r.b || 0)),
+                    tags: r.tags || [], steps: r.steps || [],
+                    ing: (r.ing || []).map(function(g){ return {n: g.name, u: g.unit, b: g.base}; })};
+          });
+        }
         renderZone();
-      } catch(e){}
+        renderRecipes();
+        window.emit('trace', {msg: 'setData ok inv=' + (d.inv ? d.inv.length : 0) +
+          ' recipesT=' + (typeof d.recipes) +
+          ' recipesNames=' + JSON.stringify((rl || []).slice(0, 6).map(function(r){ return r.name; })) +
+          ' recipesBadges=' + JSON.stringify((rl || []).slice(0, 6).map(function(r){ return (r.name || r.n) + '=' + (r.badge != null ? r.badge : r.b); }))});
+      } catch(e){
+        window.emit('trace', {msg: 'setData ERR ' + (e && e.message)});
+      }
     };
     function invToDemo(items){
       var out = {chill: [], freeze: [], ambient: []};
       (items || []).forEach(function(it){
         out[it.zone || 'chill'].push({
+          id: it.id,   /* 云端数字 id（Kotlin UUID↔数字映射）→ 编辑/删除事件必须携带 */
           n: it.name, q: it.qty, u: it.unit,
           tag: it.tag || '蔬菜', k: it.catKey || 'veg',
           w: parseInt(it.fresh && it.fresh.w) || 100,
           c: (it.fresh && it.fresh.c) || '#5FA45C',
-          note: (it.fresh && it.fresh.note) || '很新鲜'
+          note: (it.fresh && it.fresh.note) || '很新鲜',
+          days: (it.fresh && it.fresh.days != null) ? it.fresh.days : null
         });
       });
       return out;
     }
-    window.setInsets = function(top, bottom){ /* 手机壳演示无感；真机壳按安全区预留 */ };
+    window.setInsets = function(top, bottom){
+      console.log('INSETS top=' + top + ' bottom=' + bottom);
+      var st = document.documentElement.style;
+      st.setProperty('--safe-t', Math.max(0, top || 0) + 'px');
+      st.setProperty('--safe-b', Math.max(0, bottom || 0) + 'px');
+    };
+    try { console.log('INSETS env t=' + (window.CSS && CSS.supports('padding-top', 'env(safe-area-inset-top)'))); } catch(e){}
     window.setAppTheme = function(dark){
       document.body.dataset.theme = dark ? 'dark' : 'light';
       var sw = document.querySelector('#p-set .swt input'); if (sw) sw.checked = !!dark;
     };
-    window.setAppMode = function(){ /* 演示壳无需去壳 */ };
+    window.setAppMode = function(){ document.body.setAttribute('data-appshell', 'on'); };
+    /* 提醒设置回灌：视觉直接赋值（不触发上报，防启动闪烁/默认值覆盖用户设置） */
+    window.setReminder = function(d){
+      try {
+        var sw = document.getElementById('remSw');
+        var r = document.getElementById('remRange');
+        var v = document.getElementById('remV');
+        if (sw){ sw.checked = !!d.enabled; sw.disabled = false; }
+        if (r){ r.disabled = !d.enabled; r.value = d.hours || 24; paintRem(r); }
+        if (v){ v.textContent = (d.hours || 24) + ' 小时'; }
+      } catch(e){}
+    };
+    function paintRem(r){
+      var min = +r.min, max = +r.max;
+      var p = ((+r.value - min) / (max - min)) * 100;
+      r.style.background = 'linear-gradient(90deg, var(--lettuce) ' + p + '%, var(--track) ' + p + '%)';
+    }
+    /* 体检回路：原生 ping → 页面 pong（health-check 用） */
+    window.__ping = function(n){ window.emit('pong', {n: n, t: Date.now()}); };
     window.handleBack = function(){
       if (window.closeEdit && document.getElementById('ovEdit').classList.contains('show')){ closeEdit(); return true; }
+      if (window.closeAdd && document.getElementById('ovAdd').classList.contains('show')){ closeAdd(); return true; }
+      var dv = document.getElementById('detail');
+      if (dv && dv.classList.contains('on')){ closeDetail(); return true; }
       return false;
     };
     if (F){
@@ -898,6 +1156,83 @@
 
   console.log('XIAOCHU cap 1.0');
 
+  /* 三区横滑切换：touch 事件实现（WebView Pointer Events 兼容性坑，touch 100% 可靠） */
+  var SW = {x0: 0, y0: 0, on: false, act: false, logged: false};
+  function swDown(e){
+    var p = document.querySelector('.page.on');
+    var t = (e.touches && e.touches[0]) || (e.changedTouches && e.changedTouches[0]) || e;
+    if (!p || p.id !== 'p-inv') return;
+    if (curCat) return;               /* 跨区查看中禁用横滑换区 */
+    if (document.getElementById('ovEdit').classList.contains('show')) return;
+    SW.x0 = t.clientX; SW.y0 = t.clientY; SW.on = true; SW.act = false;
+  }
+  function swMove(e){
+    if (!SW.on) return;
+    var t = (e.touches && e.touches[0]) || e;
+    var dx = t.clientX - SW.x0, dy = t.clientY - SW.y0;
+    if (!SW.act && Math.abs(dx) > 18 && Math.abs(dx) > Math.abs(dy) * 1.25){ SW.act = true; if (e.cancelable) e.preventDefault(); }
+    if (SW.act){
+      if (e.cancelable) e.preventDefault();
+      var el = document.getElementById('grid');
+      el.style.transition = 'none';
+      el.style.transform = 'translateX(' + Math.max(-88, Math.min(88, dx * 0.22)) + 'px)';
+    }
+  }
+  function swUp(e){
+    if (!SW.on) return; SW.on = false;
+    var t = (e.changedTouches && e.changedTouches[0]) || e;
+    if (!SW.act) return; SW.act = false;
+    var dx = t.clientX - SW.x0;
+    var el = document.getElementById('grid');
+    var order = ['chill', 'freeze', 'ambient'];
+    if (dx <= -40){
+      el.style.transition = 'transform .15s cubic-bezier(.3,.8,.4,1)';
+      el.style.transform = 'translateX(-40px)';
+      setTimeout(function(){
+        el.style.transition = ''; el.style.transform = '';
+        setZoneAt(order[(order.indexOf(curZone) + 1) % 3]);   /* 滑动换区：静默，不弹提醒 */
+      }, 130);
+    } else if (dx >= 40){
+      el.style.transition = 'transform .15s cubic-bezier(.3,.8,.4,1)';
+      el.style.transform = 'translateX(40px)';
+      setTimeout(function(){
+        el.style.transition = ''; el.style.transform = '';
+        setZoneAt(order[(order.indexOf(curZone) + 2) % 3]);
+      }, 130);
+    } else {
+      el.style.transition = 'transform .2s cubic-bezier(.3,1.25,.5,1)';
+      el.style.transform = '';
+    }
+  }
+  /* 诊断：全局点击捕获（capture）——任何点击都打点，判定点击是否到达页面层 */
+  document.addEventListener('click', function(e){
+    var t = e.target;
+    window.emit('trace', {msg: 'clickHit ' + ((t && t.tagName) || '?') + '.' + ((t && t.className) || '').toString().slice(0, 36)});
+  }, true);
+  /* 按钮 touch 驱动（touchstart 通道已验证可靠；touchend/click 在远程页面被吞） */
+  var lastBtnT = 0;
+  document.addEventListener('touchstart', function(e){
+    var t = e.target && e.target.closest ? e.target.closest('.pill-btn') : null;
+    if (!t) return;
+    var now = Date.now(); if (now - lastBtnT < 350) return; lastBtnT = now;
+    var act = t.getAttribute('data-act');
+    window.emit('trace', {msg: 'btnTouch ' + (act || '?')});
+    if (act === 'hc') window.healthTap && window.healthTap(t);
+    if (act === 'upd') window.uiUpdateTap && window.uiUpdateTap(t);
+  }, true);
+
+  window.addEventListener('touchstart', swDown, {passive: true});
+  window.addEventListener('touchmove', swMove, {passive: false});
+  window.addEventListener('touchend', swUp);
+
+  /* 桥模式：禁用内置演示菜谱（等 DeepSeek 返回；浏览器演示保留内置 5 道） */
+  if (window.bridgeMode !== 'demo') RECIPES = [];
+  window.showHealthReport = function(txt){
+    var el = document.getElementById('hcReport');
+    if (!el) return;
+    el.textContent = txt;
+    document.getElementById('ovHealth').classList.add('show');
+  };
   renderZone(); renderRecipes(); banner(); renderFilter();
 </script>
 </body>
