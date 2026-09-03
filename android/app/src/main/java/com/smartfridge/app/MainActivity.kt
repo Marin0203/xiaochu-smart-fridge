@@ -229,6 +229,10 @@ class MainActivity : BridgeActivity(), FridgeNative.Host {
                 val en = sp.getBoolean("reminder_enabled", true)
                 val hr = sp.getInt("reminder_hours", 24)
                 wv.evaluateJavascript("window.setReminder && window.setReminder({\"enabled\":$en,\"hours\":$hr})", null)
+                // 版本卡信息: App 版本(原生) + UI 版本(version.json, 走 setUiUpdate)
+                wv.evaluateJavascript(
+                    "window.setAppInfo && window.setAppInfo(\"${BuildConfig.VERSION_NAME}\", ${BuildConfig.VERSION_CODE})", null,
+                )
                 val ui = getSharedPreferences("ui", MODE_PRIVATE)
                 // 以 files/web/version.json 为真相：已生效=ok，未生效=pending=new
                 val pending = ui.getString("ui_ver", "") ?: ""

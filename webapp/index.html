@@ -359,16 +359,23 @@
               </div></div>
             <div class="set-card"><div class="set-ic">☁️</div><div><div class="set-n">数据同步</div><div class="set-s">上次同步 刚刚</div></div>
               <div class="right" style="display:flex;align-items:center;gap:10px"><span class="dotg"></span><button class="pill-btn" onclick="syncNow(this)">立即同步</button></div></div>
+            <div class="set-card" style="cursor:default">
+              <div class="set-ic">🗂️</div>
+              <div style="min-width:0; flex:1">
+                <div class="set-n">版本信息</div>
+                <div class="set-s" style="white-space:normal; overflow:visible" id="verInfoLine">App 版本 … · UI 版本 …</div>
+              </div>
+            </div>
             <div class="set-card" style="flex-direction:column; align-items:stretch; gap:10px; cursor:default">
               <div style="display:flex; align-items:center; gap:11px; min-width:0">
                 <div class="set-ic">🚀</div>
                 <div style="min-width:0; flex:1">
                   <div class="set-n">UI 更新</div>
-                  <div class="set-s" style="white-space:normal; overflow:visible">本机版本 <b id="appVerLine" style="color:var(--ink)">同步中…</b>　·　可更新至 <b id="appTargetLine" style="color:var(--corn)">—</b></div>
+                  <div class="set-s" style="white-space:normal; overflow:visible" id="uiUpdateLine">检查中…</div>
                 </div>
               </div>
               <div style="display:flex; align-items:center; justify-content:space-between; padding:0 2px">
-                <span id="uiVerState" style="font-size:12px; color:var(--ink2)"></span>
+                <span id="uiVerState" style="font-size:11.5px; color:var(--ink2)"></span>
                 <button class="pill-btn" id="uiRestartBtn" style="display:none; padding:7px 18px" data-act="upd" onclick="window.uiUpdateTap && window.uiUpdateTap(this)">更新</button>
               </div>
             </div>
@@ -1043,7 +1050,37 @@
     var hosted = !!(F || window.AndroidBridge);
     if (hosted) document.body.setAttribute('data-appshell', 'on');   /* 真机：自动去壳全屏 */
     if (hosted){ setTimeout(function(){ window.emit('page-ready', {}); }, 200); }   /* 任何桥模式：就绪通知（统一初始化入口） */
-    /* UI 更新状态卡（Kotlin 推送） */
+    /* —— 版本卡 + 更新卡（两张卡，契约 v2: {cur,target,state} + setAppInfo） —— */
+    window.__appInfo = null;   /* {ver, code} 由原生 setAppInfo 推送 */
+    window.__uiState = {cur: null, target: null, state: null};
+    window.__renderVerCards = function(){
+      var info = document.getElementById('verInfoLine');
+      if (info){
+        info.textContent = 'App 版本 ' + (window.__appInfo ? 'v' + window.__appInfo.ver : '…') +
+          ' · UI 版本 ' + (window.__uiState.cur ? 'v' + window.__uiState.cur : '…');
+      }
+      var line = document.getElementById('uiUpdateLine');
+      var st = document.getElementById('uiVerState');
+      var btn = document.getElementById('uiRestartBtn');
+      var isNew = window.__uiState.state === 'new' && !!window.__uiState.target;
+      if (line){
+        line.innerHTML = isNew ? '可更新至 <b style="color:var(--corn)">v' + window.__uiState.target + '</b>' : '已是最新版本';
+      }
+      if (st) st.textContent = isNew ? '新版本已发布' : '';
+      if (btn){ btn.style.display = isNew ? '' : 'none'; btn.textContent = '更新'; btn.disabled = false; }
+    };
+    window.setAppInfo = function(ver, code){
+      window.__appInfo = {ver: String(ver), code: String(code)};
+      window.__renderVerCards();
+    };
+    window.setUiUpdate = function(d){
+      if (!d) return;
+      /* 契约 v2: {cur,target,state}; 兼容旧 {ver,state}: ok=本机版本 new=可更新版本 */
+      window.__uiState.cur = d.cur || (d.state === 'ok' ? d.ver : null) || window.__uiState.cur;
+      window.__uiState.target = d.target || (d.state === 'new' ? d.ver : null) || null;
+      window.__uiState.state = d.state;
+      window.__renderVerCards();
+    };
     window.uiUpdateTap = function(btn){
       btn.textContent = '正在更新…';
       btn.disabled = true;
@@ -1058,22 +1095,6 @@
     window.__healthDone = function(){
       var b = document.getElementById('hcBtn');
       if (b){ b.textContent = '一键体检'; b.disabled = false; }
-    };
-    window.setUiUpdate = function(d){
-      try {
-        var state = document.getElementById('uiVerState');
-        var btn = document.getElementById('uiRestartBtn');
-        var cur = document.getElementById('appVerLine');
-        var tgt = document.getElementById('appTargetLine');
-        if (!d) return;
-        /* 契约 v2: {cur,target,state}; 兼容旧 {ver,state}: ok=本机版本 new=可更新版本 */
-        var curV = d.cur || (d.state === 'ok' ? d.ver : null);
-        var tgtV = d.target || (d.state === 'new' ? d.ver : null);
-        if (cur && curV) cur.textContent = 'v' + curV;
-        if (tgt) tgt.textContent = tgtV ? 'v' + tgtV : '—';
-        if (state) state.textContent = d.state === 'new' ? '有新版本！' : '✅ 已是最新（云同步）';
-        if (btn) btn.style.display = (d.state === 'new' && tgtV) ? '' : 'none';
-      } catch(e){}
     };
     window.bridgeMode = F ? 'capacitor' : (window.AndroidBridge ? 'android' : 'demo');
     window.emit = function(type, payload){
