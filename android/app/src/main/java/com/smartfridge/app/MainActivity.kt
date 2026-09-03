@@ -225,10 +225,6 @@ class MainActivity : BridgeActivity(), FridgeNative.Host {
                 val wv = webView() ?: return@runOnUiThread
                 pushInsets()
                 wv.evaluateJavascript("window.setAppTheme(${SkinManager.darkMode.value})", null)
-                val sp = getSharedPreferences("settings", MODE_PRIVATE)
-                val en = sp.getBoolean("reminder_enabled", true)
-                val hr = sp.getInt("reminder_hours", 24)
-                wv.evaluateJavascript("window.setReminder && window.setReminder({\"enabled\":$en,\"hours\":$hr})", null)
                 // 版本卡信息: App 版本(原生) + UI 版本(version.json, 走 setUiUpdate)
                 wv.evaluateJavascript(
                     "window.setAppInfo && window.setAppInfo(\"${BuildConfig.VERSION_NAME}\", ${BuildConfig.VERSION_CODE})", null,
@@ -272,34 +268,14 @@ class MainActivity : BridgeActivity(), FridgeNative.Host {
         }
     }
 
-    /** 临期提醒：开→请求通知权限 + 排每日任务；关→取消任务 */
+    /** 临期提醒功能已下线(2026-09-04): 一律禁用并取消历史任务；不再请求通知权限/调度 */
     private fun applyReminder(enabled: Boolean, hours: Int) {
-        if (enabled) {
-            if (android.os.Build.VERSION.SDK_INT >= 33 &&
-                androidx.core.content.ContextCompat.checkSelfPermission(
-                    this, android.Manifest.permission.POST_NOTIFICATIONS,
-                ) != android.content.pm.PackageManager.PERMISSION_GRANTED
-            ) {
-                requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 1001)
-            }
-            com.smartfridge.app.notify.ExpiryReminder.setAheadHours(this, hours)
-            com.smartfridge.app.notify.ExpiryReminder.setup(this)
-        } else {
-            com.smartfridge.app.notify.ExpiryReminder.disable(this)
-        }
+        com.smartfridge.app.notify.ExpiryReminder.disable(this)
     }
 
     override fun onRequestPermissionsResult(
         requestCode: Int, permissions: Array<out String>, grantResults: IntArray,
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == 1001 &&
-            (grantResults.getOrNull(0) != android.content.pm.PackageManager.PERMISSION_GRANTED)
-        ) {
-            android.widget.Toast.makeText(
-                this, "通知权限被拒绝：临期提醒将无法弹出，可在系统设置 → 应用 → 通知中开启",
-                android.widget.Toast.LENGTH_LONG,
-            ).show()
-        }
     }
 }
