@@ -184,12 +184,22 @@ class MainActivity : BridgeActivity(), FridgeNative.Host {
             Trace.log(this, "s4: update clicked ($type)")
             lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
                 try {
-                    UiUpdater.downloadNow(this@MainActivity, services) { ver ->
-                        runOnUiThread {
-                            Trace.log(this@MainActivity, "s4: applied v$ver, reload")
-                            webView()?.reload()
-                        }
-                    }
+                    UiUpdater.downloadNow(
+                        this@MainActivity, services,
+                        onDone = { ver ->
+                            runOnUiThread {
+                                Trace.log(this@MainActivity, "s4: applied v$ver, reload")
+                                webView()?.reload()
+                            }
+                        },
+                        onFail = {
+                            runOnUiThread {
+                                webView()?.evaluateJavascript(
+                                    "window.toast && window.toast('更新校验失败，请重试')", null,
+                                )
+                            }
+                        },
+                    )
                 } catch (e: Exception) {
                     Trace.log(this@MainActivity, "s4: update fail ${e.message}")
                     runOnUiThread {

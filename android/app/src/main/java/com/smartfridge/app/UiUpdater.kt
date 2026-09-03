@@ -53,6 +53,7 @@ object UiUpdater {
             if (ver == currentVer(context)) return null
             context.getSharedPreferences("ui", android.content.Context.MODE_PRIVATE).edit()
                 .putString("ui_ver", ver)
+                .putString("ui_sha", obj["sha256"]?.jsonPrimitive?.contentOrNull ?: "")
                 .apply()
             Trace.log(context, "ui: update available $ver (lv=${currentVer(context)})")
             return ver
@@ -61,17 +62,20 @@ object UiUpdater {
         }
     }
 
-    /** 下载并应用：下载→sha 验签→落盘（prev 备份）→回调通知 */
+    /** 下载并应用：下载→sha 验签→落盘（prev 备份）→回调通知
+     *  校验用 checkForUpdate 时的快照 sha(ui_sha)：
+     *  修复"ui-release 返回最新版 sha 却比对旧版下载页"的竞态假失败（09-03 实机 20+ 次 sha mismatch 根因） */
     suspend fun downloadNow(
         context: android.content.Context,
         services: AppServices,
         onDone: (String) -> Unit = {},
+        onFail: (String) -> Unit = {},
     ) {
         val token = services.auth.token()
         if (token.isNullOrBlank()) return
         try {
-            val pending = context.getSharedPreferences("ui", android.content.Context.MODE_PRIVATE)
-                .getString("ui_ver", "") ?: return
+            val prefs = context.getSharedPreferences("ui", android.content.Context.MODE_PRIVATE)
+            val pending = prefs.getString("ui_ver", "") ?: return
             Trace.log(context, "ui: download pending=$pending")
             val page = com.smartfridge.app.data.Http.get(
                 "$base/functions/v1/ui-page?ver=$pending",
@@ -82,15 +86,19 @@ object UiUpdater {
             val digest = MessageDigest.getInstance("SHA-256")
                 .digest(html.toByteArray(Charsets.UTF_8))
                 .joinToString("") { "%02x".format(it) }
-            // 清单重查取 sha（以发布门为准）
-            val r = com.smartfridge.app.data.Http.get(
-                "$base/functions/v1/ui-release?cv=$CONTRACT&lv=$pending",
-                mapOf("apikey" to key, "Authorization" to "Bearer $token"),
-            )
-            val want = (r.jsonOrNull() as? kotlinx.serialization.json.JsonObject)
-                ?.get("sha256")?.jsonPrimitive?.contentOrNull
+            // 快照 sha 为准；旧版 prefs 无快照时才二次查询兜底
+            var want = prefs.getString("ui_sha", "")
+            if (want.isNullOrBlank()) {
+                val r = com.smartfridge.app.data.Http.get(
+                    "$base/functions/v1/ui-release?cv=$CONTRACT&lv=$pending",
+                    mapOf("apikey" to key, "Authorization" to "Bearer $token"),
+                )
+                want = (r.jsonOrNull() as? kotlinx.serialization.json.JsonObject)
+                    ?.get("sha256")?.jsonPrimitive?.contentOrNull
+            }
             if (want != null && want != digest) {
                 Trace.log(context, "ui: sha mismatch, reject")
+                onFail("下载内容校验失败，请重试")
                 return
             }
             val dir = webDir(context)
