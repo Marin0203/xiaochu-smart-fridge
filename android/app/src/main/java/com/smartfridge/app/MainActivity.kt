@@ -131,6 +131,24 @@ class MainActivity : BridgeActivity(), FridgeNative.Host {
         } else ""
     } catch (_: Exception) { "" }
 
+    /** 版本卡推送（每次页面加载都执行，不依赖 page-ready 事件通道时序——修复热更 reload 后版本卡滞留占位符）：
+     *  setAppInfo = APK 版本; setUiUpdate = {cur:本机UI版本, target:可更新版本} 契约 v2 */
+    private fun pushVersionCards(wv: WebView) {
+        wv.evaluateJavascript(
+            "window.setAppInfo && window.setAppInfo(\"${BuildConfig.VERSION_NAME}\", ${BuildConfig.VERSION_CODE})", null,
+        )
+        val ui = getSharedPreferences("ui", MODE_PRIVATE)
+        val pending = ui.getString("ui_ver", "") ?: ""
+        val loaded = loadedWebVersion()
+        val st = if (pending.isNotEmpty() && pending != loaded) "new" else "ok"
+        if (loaded.isNotEmpty()) {
+            val target = if (st == "new") pending else ""
+            wv.evaluateJavascript(
+                "window.setUiUpdate && window.setUiUpdate({\"cur\":\"$loaded\",\"target\":\"$target\",\"state\":\"$st\",\"ver\":\"$loaded\"})", null,
+            )
+        }
+    }
+
     /** FridgeNative: 页面就绪 → 建桥 + 推安全区/主题/数据（插件线程 → 必须切主线程操作 WebView）
      *  Cap WebView 在 ready 瞬间可能尚未挂载：延迟重试至多 10 次（250ms/次）*/
     override fun onCapPageReady() {
@@ -178,10 +196,7 @@ class MainActivity : BridgeActivity(), FridgeNative.Host {
         wv.addJavascriptInterface(b, "AndroidBridge")
         pushInsets()
         wv.evaluateJavascript("window.setAppTheme(${SkinManager.darkMode.value})", null)
-        val sp = getSharedPreferences("settings", MODE_PRIVATE)
-        val en = sp.getBoolean("reminder_enabled", true)
-        val hr = sp.getInt("reminder_hours", 24)
-        wv.evaluateJavascript("window.setReminder && window.setReminder({\"enabled\":$en,\"hours\":$hr})", null)
+        pushVersionCards(wv)
         Trace.log(this, "bridge: pushAll called")
         bridge?.pushAll()
     }
@@ -199,6 +214,9 @@ class MainActivity : BridgeActivity(), FridgeNative.Host {
                         onDone = { ver ->
                             runOnUiThread {
                                 Trace.log(this@MainActivity, "s4: applied v$ver, reload")
+                                android.widget.Toast.makeText(
+                                    this@MainActivity, "已更新至 v$ver，正在刷新…", android.widget.Toast.LENGTH_SHORT,
+                                ).show()
                                 webView()?.reload()
                             }
                         },
@@ -229,18 +247,7 @@ class MainActivity : BridgeActivity(), FridgeNative.Host {
                 wv.evaluateJavascript(
                     "window.setAppInfo && window.setAppInfo(\"${BuildConfig.VERSION_NAME}\", ${BuildConfig.VERSION_CODE})", null,
                 )
-                val ui = getSharedPreferences("ui", MODE_PRIVATE)
-                // 以 files/web/version.json 为真相：已生效=ok，未生效=pending=new
-                val pending = ui.getString("ui_ver", "") ?: ""
-                val loaded = loadedWebVersion()
-                val st = if (pending.isNotEmpty() && pending != loaded) "new" else "ok"
-                if (loaded.isNotEmpty()) {
-                    // 契约 v2: cur=本机版本 target=可更新版本（ver 保留兼容旧页=本机版本）
-                    val target = if (st == "new") pending else ""
-                    wv.evaluateJavascript(
-                        "window.setUiUpdate && window.setUiUpdate({\"cur\":\"$loaded\",\"target\":\"$target\",\"state\":\"$st\",\"ver\":\"$loaded\"})", null,
-                    )
-                }
+                pushVersionCards(wv)
                 getSharedPreferences("ui", MODE_PRIVATE).edit().putInt("page_fail", 0).apply()
                 Trace.log(this, "bridge: pushAll called")
                 bridge?.pushAll()
