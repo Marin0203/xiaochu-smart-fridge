@@ -1,0 +1,17 @@
+# 本机私有配置 —— 已被 .gitignore 忽略, 请勿提交!
+# 复制为 local.properties 并填写真实值 (文件名必须是 local.properties)
+SUPABASE_URL=https://juxlfhrgywurttzzxgvr.supabase.co
+# publishable key (新版, 替代旧 anon key; 仅写字符串本身, 不要加引号)
+# 获取方式: Supabase Dashboard → Project Settings → API Keys → Publishable key
+SUPABASE_KEY=sb_publishable_请替换为你的key
+# AI 调用模式: edge(默认, 推荐) | direct
+AI_MODE=edge
+# direct 模式才需要下面三个 (本地 Ollama / 自部署用):
+# OPENAI_BASE_URL=https://api.deepseek.com/v1
+# ⚠️ 严禁填写真实 LLM key! OPENAI_API_KEY 会经 BuildConfig 编译进 APK。
+# 正式/自用发布一律 AI_MODE=edge: DeepSeek key 只在 Supabase Edge Functions Secrets 里, 不进 APK。
+#OPENAI_API_KEY=sk-xxx
+#OPENAI_MODEL=deepseek-chat
+# 家庭共享账号 (两人共用): 打开 App 自动登录 + 自动创建「我们家」, 无需注册流程
+AUTO_EMAIL=xiaochu.family@example.com
+AUTO_PASSWORD=<替换为你的密码>

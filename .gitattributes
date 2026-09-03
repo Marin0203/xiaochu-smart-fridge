@@ -1,0 +1,25 @@
+# ============================================================
+# 换行符策略 —— 本仓库 100% 禁止 CRLF 污染
+# 原因: UI 热更新 sha256 校验基于文件字节 (发布口径: UTF-8 + LF)。
+# 若 .html 检出为 CRLF, 本地 sha 与云端不一致 → 热更验签失败。
+# 原则: 文本一律 LF; 仅 .bat 保留 CRLF (Windows 脚本兼容)。
+# ============================================================
+* text=auto eol=lf
+*.bat text eol=crlf
+gradlew text eol=lf
+
+# 二进制 (防止 diff/自动换行处理)
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.jar binary
+*.aar binary
+*.so binary
+*.jks binary
+*.keystore binary
+*.apk binary
+*.zip binary
+*.pdf binary

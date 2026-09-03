@@ -1,0 +1,51 @@
+# ============================================================
+# 小厨 · .gitignore —— 白名单之外的任何东西都不准进仓库
+# 分类: 本地 Secret / 构建产物 / 发布产物 / 会话与备份
+# ============================================================
+
+# ---------- 本地 Secret / 凭证 (最高优先级) ----------
+.env
+*.env
+!.env.example
+android/local.properties
+*.jks
+*.keystore
+*.p12
+app/secrets.json
+
+# ---------- Android 构建 ----------
+android/.gradle/
+android/**/build/
+android/build/
+android/app/build/
+android/app/release/
+android/.idea/
+android/*.iml
+android/captures/
+android/.kotlin/
+android/local.properties
+
+# ---------- Flutter 版本 (保留参考) ----------
+app/.dart_tool/
+app/build/
+app/secrets.json
+
+# ---------- 发布产物 (走发布站/共享盘, 不入库) ----------
+*.apk
+*.aab
+backups/
+xiaochu-release/
+
+# ---------- 后端 / 工具 ----------
+backend/supabase/.temp/
+backend/supabase/.branches/
+node_modules/
+*.log
+*.log.*
+
+# ---------- 会话与杂项 ----------
+.session_restore/
+.idea/
+*.iml
+Thumbs.db
+.DS_Store

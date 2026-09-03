@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- 离线识别: 仅需录音权限, 无需网络权限 -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <!-- 语音引擎自动注册 (ContentProvider 随进程启动初始化) -->
+    <application>
+        <provider
+            android:name="com.smartfridge.app.speech.VoskBootstrapProvider"
+            android:authorities="com.smartfridge.app.speech.bootstrap"
+            android:exported="false"
+            android:initOrder="100" />
+    </application>
+
+</manifest>

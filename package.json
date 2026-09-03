@@ -1,0 +1,13 @@
+{
+  "name": "xiaochu-fridge",
+  "version": "1.0.0",
+  "private": true,
+  "description": "小厨 · 家庭共享智能冰箱 (Capacitor host)",
+  "dependencies": {
+    "@capacitor/core": "^6.0.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.0.2",
+    "@capacitor/android": "^6.0.2"
+  }
+}

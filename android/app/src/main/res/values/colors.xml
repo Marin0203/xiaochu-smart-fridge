@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- App 图标底色: 取手绘图奶油色背景 -->
+    <color name="ic_launcher_background">#FFF3DC</color>
+</resources>

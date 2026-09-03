@@ -1,0 +1,44 @@
+name: smart_fridge
+description: 家庭共享智能冰箱与 AI 食谱 —— 多端库存同步 / 保质期预警 / AI 食谱推荐
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: '>=3.4.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # 后端: Supabase (Auth / Postgres RLS / Realtime / Edge Functions)
+  supabase_flutter: ^2.8.0
+
+  # 状态管理 (MVVM: ViewModel = ChangeNotifier)
+  provider: ^6.1.2
+  go_router: ^14.6.0
+
+  # 本地优先存储 (离线可用)
+  sqflite: ^2.3.3
+  path: ^1.9.0
+
+  # AI 直连模式 (OpenAI 兼容 API, 默认走 Edge Function 不需要)
+  http: ^1.2.2
+
+  # 工具
+  intl: ^0.19.0
+  uuid: ^4.5.0
+
+  # 语音识别 (轻量在线 ASR 默认引擎; whisper.cpp 升级见 README)
+  speech_to_text: ^7.0.0
+
+  # Markdown 渲染 —— 注意: 官方 flutter_markdown 已归档停更,
+  # 使用社区维护 fork flutter_markdown_plus (API 兼容)
+  flutter_markdown_plus: ^1.0.12
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true

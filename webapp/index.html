@@ -1,0 +1,904 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>小厨 · 重构补齐版</title>
+<style>
+  :root{
+    --bg:#FBF7F0; --noise-op:.04; --ink:#3B3833; --ink2:#8A857C; --line:rgba(61,52,38,.09);
+    --lettuce:#6D9C55; --lettuce-soft:rgba(109,156,85,.12);
+    --corn:#E9B960; --corn-soft:rgba(233,185,96,.16); --tomato:#C4624A; --tomato-soft:rgba(196,98,74,.12);
+    --glass:rgba(255,255,255,.68); --glass-strong:rgba(255,255,255,.92);
+    --glass-border:rgba(255,255,255,.55); --glass-high:rgba(255,255,255,.95);
+    --card:rgba(255,255,255,.72); --track:rgba(97,76,50,.10);
+    --shadow:0 18px 40px rgba(97,76,50,.10), 0 2px 6px rgba(97,76,50,.05);
+    --tab:0 6px 16px rgba(97,76,50,.14);
+    --chill:rgba(109,156,85,.07); --freeze:rgba(140,180,215,.08); --wood:rgba(160,120,80,.06);
+    --shelf:rgba(61,52,38,.05);
+  }
+  [data-theme="dark"]{
+    --bg:#221E19; --noise-op:.05; --ink:#F2EAD9; --ink2:#B4AC9D; --line:rgba(255,240,214,.10);
+    --lettuce:#A8C78C; --lettuce-soft:rgba(168,199,140,.14);
+    --corn:#EFC383; --corn-soft:rgba(239,195,131,.16); --tomato:#D98963; --tomato-soft:rgba(217,137,99,.14);
+    --glass:rgba(58,50,40,.66); --glass-strong:#4A4238F2;  /* 夜间高亮面=暖深灰（浅字可读） */
+    --glass-border:rgba(255,235,200,.10); --glass-high:rgba(255,235,200,.22);
+    --card:rgba(58,50,40,.66); --track:rgba(255,240,214,.12);
+    --shadow:0 18px 40px rgba(0,0,0,.38), 0 0 60px rgba(240,200,140,.07);
+    --tab:0 8px 20px rgba(0,0,0,.45);
+    --chill:rgba(143,175,122,.10); --freeze:rgba(127,168,204,.12); --wood:rgba(160,120,80,.08);
+    --shelf:rgba(255,240,214,.04);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;tap-highlight-color:transparent}
+  button{-webkit-user-select:none;user-select:none;touch-action:manipulation;outline:none}
+  html,body{height:100%}
+  body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+    color:var(--ink);  /* 全局文字色：夜间继承浅色，杜绝默认黑色字 */
+    background:#e9e2d4; min-height:100vh; display:flex; align-items:center; justify-content:center;
+    padding:34px 14px; transition:background .5s ease, color .5s ease}
+  [data-theme="dark"] body{background:#171310}
+  body::after{content:""; position:fixed; inset:0; pointer-events:none; opacity:var(--noise-op);
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/></filter><rect width='120' height='120' filter='url(%23n)' opacity='0.5'/></svg>")}
+
+  /* 手机壳 */
+  .device{position:relative; width:398px; max-width:100%; border-radius:52px; padding:7px;
+    background:linear-gradient(160deg,#fffdf7,#efe6d3);
+    box-shadow:0 30px 70px rgba(80,60,35,.28), 0 4px 14px rgba(80,60,35,.12), inset 0 0 0 1px rgba(255,255,255,.6)}
+  .device::before{content:""; position:absolute; left:-2px; top:120px; width:3px; height:64px; border-radius:3px; background:rgba(120,95,60,.35)}
+  .device::after{content:""; position:absolute; right:-2px; top:150px; width:3px; height:44px; border-radius:3px; background:rgba(120,95,60,.25)}
+  .screen{position:relative; border-radius:46px; background:var(--bg); overflow:hidden;
+    height:786px; display:flex; flex-direction:column; transition:background .5s ease;
+    box-shadow:inset 0 0 0 1px rgba(0,0,0,.04)}
+  .screen::before{content:""; position:absolute; inset:0; pointer-events:none; opacity:var(--noise-op);
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/></filter><rect width='120' height='120' filter='url(%23n)' opacity='0.5'/></svg>")}
+  .notch{position:absolute; top:0; left:50%; transform:translateX(-50%); width:118px; height:26px;
+    border-radius:0 0 18px 18px; background:rgba(0,0,0,.85); z-index:30}
+  .notch::after{content:""; position:absolute; top:7px; left:50%; transform:translateX(-50%);
+    width:9px; height:9px; border-radius:50%; background:#1b2a55; box-shadow:inset 0 0 3px rgba(0,0,0,.8)}
+
+  .viewport{flex:1; overflow:hidden; padding:0 18px; display:flex; flex-direction:column}
+
+  /* 标题栏（贴顶，背景延伸，安全区由 padding 表示） */
+  .topbar{display:flex; align-items:center; padding:44px 0 12px; flex:none; position:relative; z-index:5}
+  .topbar .grp{display:flex; align-items:center; gap:10px}
+  .topbar .t{font-size:24px; font-weight:800}
+  .topbar .acts{margin-left:auto; display:flex; gap:9px}
+  .circle-btn{width:40px; height:40px; border-radius:50%; border:1px solid var(--glass-border);
+    border-top-color:var(--glass-high); background:var(--glass); box-shadow:var(--tab); color:var(--ink);
+    font-size:17px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:transform .12s ease}
+  .circle-btn:active{transform:scale(.9)}
+  .circle-btn.spin{animation:spin .9s cubic-bezier(.4,0,.2,1)}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* 筛选下拉 */
+  .filter-wrap{position:relative}
+  .filter-panel{display:none; position:absolute; top:46px; left:0; width:196px; padding:8px; z-index:40;
+    background:var(--glass); border:1px solid var(--glass-border); border-top-color:var(--glass-high);
+    border-radius:22px; box-shadow:var(--tab); backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px)}
+  .filter-wrap.open .filter-panel{display:block; animation:fp .22s cubic-bezier(.3,1.2,.5,1)}
+  @keyframes fp{from{opacity:0; transform:translateY(-6px) scale(.96)} to{opacity:1; transform:none}}
+  .fp-opt{width:100%; border:none; background:none; cursor:pointer; padding:9px 12px; border-radius:10px;
+    font-size:13px; font-weight:600; color:var(--ink2); display:flex; align-items:center}
+  .fp-opt:hover{color:var(--ink)}
+  .fp-opt.on{color:var(--ink); background:var(--lettuce-soft)}
+  .fp-opt .cnt{margin-left:auto; font-size:11px; color:var(--ink2); font-weight:400}
+  .fp-opt.on .cnt{display:none}
+  .fp-opt .ok{margin-left:auto; color:var(--corn); font-weight:800; display:none}
+  .fp-opt.on .ok{display:block}
+
+  .scroll{flex:1; overflow-y:auto; scrollbar-width:none; padding-bottom:120px}
+  .scroll::-webkit-scrollbar{display:none}
+  .page{display:none}
+  .page.on{display:flex; flex-direction:column; animation:inp .28s cubic-bezier(.2,.8,.3,1)}
+  @keyframes inp{from{opacity:0; transform:translateY(10px)} to{opacity:1; transform:none}}
+
+  /* 胶囊 & 跨区横幅 */
+  .capsule{display:flex; gap:4px; padding:5px; border-radius:99px; margin-bottom:12px;
+    background:var(--glass); border:1px solid var(--glass-border); border-top-color:var(--glass-high);
+    box-shadow:var(--tab); transition:opacity .25s ease}
+  .capsule.off{opacity:.45; pointer-events:none}
+  .capsule .tab{flex:1; text-align:center; padding:10px 0; border-radius:99px; font-size:13.5px;
+    font-weight:600; color:var(--ink2); cursor:pointer; transition:all .25s ease}
+  .capsule .tab.on{background:var(--glass-strong); color:var(--ink); box-shadow:var(--tab); border:1px solid var(--glass-high)}
+  .cross-note{display:flex; align-items:center; gap:10px; padding:10px 14px; border-radius:14px; margin-bottom:12px;
+    background:var(--lettuce-soft); border:1px solid var(--lettuce); font-size:12.5px; font-weight:600}
+  .cross-note button{margin-left:auto; border:none; background:none; color:var(--lettuce); font-size:12px; font-weight:700; cursor:pointer}
+  .banner{display:flex; align-items:center; gap:10px; padding:12px 16px; border-radius:16px; margin-bottom:12px;
+    background:var(--corn-soft); border:1px solid var(--corn); font-size:13px; font-weight:600; animation:inp .3s ease}
+  .banner .dot{width:8px; height:8px; min-width:8px; border-radius:50%; background:var(--corn); box-shadow:0 0 0 4px var(--corn-soft)}
+
+  /* 库存卡（两列，级联入场） */
+  .grid{display:grid; grid-template-columns:1fr 1fr; gap:18px 14px; padding:2px 2px 8px; margin:-2px -2px 0}
+  .card{background:var(--card); border:1px solid var(--glass-border); border-top-color:var(--glass-high);
+    border-radius:22px; box-shadow:0 8px 22px rgba(97,76,50,.09), 0 2px 5px rgba(97,76,50,.05); padding:13px 14px; cursor:pointer;
+    animation:cardIn .32s cubic-bezier(.2,.8,.3,1) both; transition:transform .12s ease, background .5s ease}
+  @keyframes cardIn{from{opacity:0; transform:translateY(10px) scale(.98)} to{opacity:1; transform:none}}
+  .card:active{transform:scale(.97)}
+  .card .r1{display:flex; align-items:center; gap:10px}
+  .card .tile{width:40px; height:40px; min-width:40px; border-radius:14px; background:var(--lettuce-soft);
+    display:flex; align-items:center; justify-content:center; font-size:23px}
+  .card .nm{flex:1; min-width:0; font-size:14px; font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .card .qt{font-size:13px; font-weight:800; white-space:nowrap}
+  .card .r2{display:flex; justify-content:flex-end; align-items:center; gap:6px; margin:7px 0 9px; font-size:11px; color:var(--ink2); font-weight:600}
+  .zbadge{font-size:10.5px; font-weight:600; color:var(--corn); background:var(--corn-soft); padding:2px 7px; border-radius:6px}
+  .card .fresh{height:6px; border-radius:99px; background:var(--track); overflow:hidden}
+  .card .fresh i{display:block; height:100%; border-radius:99px; background:var(--c); width:var(--w)}
+  .empty{text-align:center; padding:34px 0; color:var(--ink2); font-size:13px}
+
+  /* 食谱 */
+  .switch-line{display:flex; align-items:center; justify-content:space-between; margin-bottom:13px}
+  .switch-line .lbl{font-size:13.5px; font-weight:600}
+  .switch-line .hint{display:block; font-size:11px; color:var(--ink2); font-weight:400; margin-top:2px}
+  .swt{position:relative; display:inline-block; vertical-align:middle; width:46px; height:27px; flex:none; cursor:pointer}
+  .swt input{position:absolute; opacity:0}
+  .swt .tr{position:absolute; inset:0; border-radius:99px; background:var(--track); border:1px solid var(--line); transition:background .25s}
+  .swt .kn{position:absolute; top:3px; left:4px; width:19px; height:19px; border-radius:50%; background:var(--glass-strong); box-shadow:var(--tab); transition:left .25s cubic-bezier(.3,1.2,.5,1)}
+  .swt input:checked ~ .tr{background:var(--corn)}
+  .swt input:checked ~ .kn{left:22px}
+  .r-list{display:flex; flex-direction:column; gap:13px; padding:2px 2px 8px; margin:-2px -2px 0}
+  .r-card{background:var(--card); border:1px solid var(--glass-border); border-top-color:var(--glass-high);
+    border-radius:22px; box-shadow:0 8px 22px rgba(97,76,50,.09), 0 2px 5px rgba(97,76,50,.05); padding:15px 16px; cursor:pointer;
+    animation:cardIn .32s cubic-bezier(.2,.8,.3,1) both; transition:transform .12s ease}
+  .r-card:active{transform:scale(.98)}
+  .r-head{display:flex; align-items:center; gap:12px}
+  .r-head .emo{width:44px; height:44px; min-width:44px; border-radius:50%; background:var(--lettuce-soft);
+    display:flex; align-items:center; justify-content:center; font-size:24px}
+  .r-head .rn{font-size:15px; font-weight:800}
+  .r-head .rt{font-size:11.5px; color:var(--ink2); margin-top:2px}
+  .r-badge{margin-left:auto; font-size:10.5px; font-weight:700; color:var(--corn); background:var(--corn-soft);
+    border:1px solid var(--corn); padding:3px 9px; border-radius:99px}
+  .r-arrow{margin-left:10px; color:var(--ink2); font-size:13px}
+  .r-tags{display:flex; gap:6px; margin-top:10px; flex-wrap:wrap}
+  .r-tag{font-size:11px; font-weight:600; color:var(--ink2); border:1px solid var(--line); padding:3px 9px; border-radius:8px; background:var(--glass)}
+
+  /* 详情（右滑） */
+  #detail{position:absolute; inset:0; z-index:15; background:var(--bg); display:none; flex-direction:column;
+    padding:0 18px; animation:slIn .3s cubic-bezier(.2,.8,.3,1)}
+  #detail.on{display:flex}
+  @keyframes slIn{from{opacity:0; transform:translateX(56px)} to{opacity:1; transform:none}}
+  .detail-head{display:flex; align-items:center; padding:44px 0 12px; gap:12px}
+  .detail-head .t{font-size:24px; font-weight:800; margin:0 auto}
+  #detailScroll{flex:1; overflow-y:auto; scrollbar-width:none; padding-bottom:110px}
+  #detailScroll::-webkit-scrollbar{display:none}
+  .d-hero{background:var(--card); border:1px solid var(--glass-border); border-top-color:var(--glass-high);
+    border-radius:22px; box-shadow:var(--shadow); padding:16px; display:flex; gap:12px; align-items:center; margin-bottom:14px}
+  .d-hero .emo{width:52px; height:52px; min-width:52px; border-radius:50%; background:var(--lettuce-soft);
+    display:flex; align-items:center; justify-content:center; font-size:28px}
+  .d-name{font-size:18px; font-weight:800}
+  .d-meta{font-size:12px; color:var(--ink2); margin-top:3px}
+  .d-right{margin-left:auto; display:flex; flex-direction:column; align-items:flex-end; gap:8px}
+  .copy-btn{border:none; cursor:pointer; padding:7px 12px; border-radius:99px; font-size:11.5px; font-weight:700;
+    color:var(--lettuce); background:var(--lettuce-soft); border:1px solid var(--lettuce)}
+  .step{display:flex; gap:11px; padding:9px 0; align-items:flex-start}
+  .step .sn{width:25px; height:25px; min-width:25px; border-radius:50%; background:var(--lettuce-soft);
+    color:var(--lettuce); font-weight:800; font-size:13px; display:flex; align-items:center; justify-content:center}
+  .step .st{font-size:16px; line-height:1.7}
+  .ingline{display:flex; align-items:center; gap:10px; padding:7px 0}
+  .ingline .nm{font-size:13px; font-weight:700}
+  .ingline .ct{font-size:10.5px; color:var(--ink2); margin-top:1px}
+  .qty-ctl{margin-left:auto; display:flex; align-items:center}
+  .qty-ctl button{width:25px; height:25px; border-radius:50%; border:1px solid var(--glass-border); border-top-color:var(--glass-high);
+    background:var(--glass); box-shadow:var(--tab); color:var(--ink); font-size:13px; font-weight:700; cursor:pointer}
+  .qty-ctl .val{min-width:56px; text-align:center; font-size:12.5px; font-weight:800}
+  .deduct{width:100%; border:none; cursor:pointer; margin-top:12px; padding:13px; border-radius:16px;
+    font-size:14px; font-weight:800; color:#fff; background:var(--lettuce); box-shadow:var(--tab)}
+  .deduct:active{transform:scale(.97)}
+
+  /* 设置 */
+  .set{display:flex; flex-direction:column; gap:11px}
+  .set-card{background:var(--card); border:1px solid var(--glass-border); border-top-color:var(--glass-high);
+    border-radius:18px; box-shadow:var(--shadow); padding:13px 16px; display:flex; align-items:center; gap:11px; cursor:pointer; transition:background .15s ease}
+  .set-card:hover{background:var(--glass-strong)}
+  .set-ic{width:38px; height:38px; min-width:38px; border-radius:12px; background:var(--lettuce-soft);
+    display:flex; align-items:center; justify-content:center; font-size:18px}
+  .set-n{font-size:14px; font-weight:700}
+  .set-s{font-size:11.5px; color:var(--ink2); margin-top:2px}
+  .right{margin-left:auto}
+  .chev{color:var(--ink2); font-size:12px; transition:transform .25s ease}
+  input[type=range]{width:150px; accent-color:var(--corn); -webkit-appearance:none; height:6px; border-radius:99px; background:var(--track)}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; width:19px; height:19px; border-radius:50%;
+    background:var(--glass-strong); border:1px solid var(--glass-high); box-shadow:var(--tab)}
+  .pill-btn{border:none; cursor:pointer; padding:8px 16px; border-radius:99px; font-size:12.5px; font-weight:700; color:#fff; background:var(--lettuce); box-shadow:var(--tab)}
+  .dotg{width:8px; height:8px; border-radius:50%; background:var(--lettuce); box-shadow:0 0 0 4px var(--lettuce-soft)}
+  /* 下拉 */
+  .dropdown-set{display:none}
+  .set-card.open .dropdown-set{display:block; animation:inp .22s ease}
+
+  /* 底部导航 */
+  .nav{position:absolute; left:14px; right:14px; bottom:16px; z-index:25; display:flex; padding:6px 8px;
+    border-radius:22px; background:var(--glass); border:1px solid var(--glass-border); border-top-color:var(--glass-high);
+    box-shadow:var(--tab); backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px)}
+  .nav-ind{position:absolute; top:6px; bottom:6px; left:8px; width:calc((100% - 16px)/3);
+    background:var(--glass-strong); border:1px solid var(--glass-high); border-radius:16px;
+    box-shadow:var(--tab); transition:left .32s cubic-bezier(.3,1.25,.5,1)}
+  .nav button{position:relative; z-index:1; flex:1; border:none; background:none; color:var(--ink2); cursor:pointer;
+    display:flex; flex-direction:column; align-items:center; gap:2px; font-size:11px; font-weight:700}
+  .nav button.on{color:var(--ink)}
+  .fab{position:absolute; right:24px; bottom:98px; z-index:24; width:54px; height:54px; border-radius:50%;
+    background:var(--glass-strong); border:1px solid var(--glass-high); box-shadow:var(--tab);
+    color:var(--corn); font-size:25px; display:flex; align-items:center; justify-content:center; cursor:pointer}
+  .fab:active{transform:scale(.9)}
+  .fab.hide{opacity:0; pointer-events:none; transform:scale(.8); transition:transform .25s ease, opacity .25s ease}
+  /* 数字输入（自由输入 · 一位小数） */
+  .num{width:64px; border:1px solid var(--glass-border); border-top-color:var(--glass-high);
+    background:var(--glass); border-radius:12px; padding:6px 10px; font-size:14px; font-weight:800;
+    color:var(--ink); text-align:center; outline:none; font-family:inherit; appearance:textfield}
+  .num:focus{border-color:var(--corn)}
+  .num::-webkit-inner-spin-button,.num::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+  /* 悬浮菜单（不压缩下方布局） */
+  .dd-wrap{position:relative}
+  .menu{position:absolute; top:calc(100% + 6px); left:0; right:0; z-index:60; display:none;
+    background:var(--glass); border:1px solid var(--glass-border); border-top-color:var(--glass-high);
+    border-radius:16px; box-shadow:var(--tab); padding:8px;
+    backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px)}
+  .dd-wrap.open .menu{display:block; animation:inp .22s ease}
+  .homebar{position:absolute; bottom:6px; left:50%; transform:translateX(-50%); width:110px; height:4px;
+    border-radius:99px; background:rgba(0,0,0,.25); z-index:26}
+
+  /* 浮窗 / toast */
+  .overlay{position:absolute; inset:0; z-index:40; background:rgba(30,24,18,.32); backdrop-filter:blur(6px);
+    -webkit-backdrop-filter:blur(6px); display:none; align-items:center; justify-content:center; padding:22px}
+  .overlay.show{display:flex; animation:fb .22s ease}
+  @keyframes fb{from{opacity:0} to{opacity:1}}
+  .modal{width:100%; max-width:316px; background:var(--bg); color:var(--ink); border:1px solid var(--glass-high);
+    border-radius:24px; box-shadow:var(--shadow); padding:20px; animation:mp .26s cubic-bezier(.3,1.25,.5,1)}
+  @keyframes mp{from{transform:scale(.92) translateY(10px); opacity:.6} to{transform:none; opacity:1}}
+  .m-head{display:flex; align-items:center; margin-bottom:12px}
+  .m-title{font-size:17px; font-weight:800}
+  .m-close{margin-left:auto; width:28px; height:28px; border-radius:50%; border:none; background:var(--glass); color:var(--ink2); cursor:pointer}
+  .m-label{font-size:12px; font-weight:700; color:var(--ink2); margin:12px 0 8px}
+  .chips{display:flex; gap:7px; flex-wrap:wrap}
+  .chip{border:none; cursor:pointer; padding:7px 14px; border-radius:99px; font-size:12.5px; font-weight:700;
+    color:var(--ink2); background:var(--glass); border:1px solid var(--line); transition:all .18s cubic-bezier(.3,1.2,.5,1)}
+  .chip.on{background:var(--glass-strong); color:var(--ink); border-color:var(--corn); box-shadow:var(--tab); transform:scale(1.04)}
+  .m-actions{display:flex; gap:10px; margin-top:20px}
+  .m-ghost{flex:1; border:none; background:none; color:var(--ink2); font-size:13px; font-weight:700; cursor:pointer}
+  .m-danger{flex:1; border:1px solid var(--tomato); background:var(--tomato-soft); color:var(--tomato);
+    font-size:13px; font-weight:700; padding:11px; border-radius:14px; cursor:pointer}
+  .m-primary{flex:1.2; border:none; background:var(--lettuce); color:#fff; font-size:13.5px; font-weight:800;
+    padding:11px; border-radius:14px; box-shadow:var(--tab); cursor:pointer}
+
+  .toast{position:absolute; left:50%; bottom:100px; transform:translateX(-50%) translateY(14px); opacity:0;
+    z-index:50; padding:11px 18px; border-radius:99px; font-size:12.5px; font-weight:700; pointer-events:none;
+    background:var(--glass-strong); color:var(--ink); border:1px solid var(--glass-high);
+    box-shadow:var(--tab);
+    transition:transform .3s cubic-bezier(.3,1.2,.5,1), opacity .3s}
+  [data-theme="dark"] .toast{background:#3A3228EE; color:#F2EAD9; border-color:var(--glass-high)}
+  .toast.show{transform:translateX(-50%) translateY(0); opacity:1}
+</style>
+</head>
+<body data-theme="light">
+<div class="device">
+  <div class="screen">
+    <div class="notch"></div>
+
+    <div class="viewport">
+      <div class="topbar" id="topbar">
+        <div class="grp">
+          <div class="filter-wrap" id="fw">
+            <button class="circle-btn" onclick="event.stopPropagation();toggleFilter()" title="分类筛选">🔍</button>
+            <div class="filter-panel" id="fp"></div>
+          </div>
+          <div class="t" id="hdT">库存</div>
+        </div>
+        <div class="acts">
+          <button class="circle-btn" id="btnSync" onclick="doSync(this)" title="同步库存">⟳</button>
+          <button class="circle-btn" id="btnRefresh" onclick="doRefresh(this)" style="display:none" title="刷新菜谱">⟳</button>
+        </div>
+      </div>
+      <div class="scroll">
+        <!-- 库存 -->
+        <div class="page on" id="p-inv">
+          <div id="bannerBox"></div>
+          <div class="capsule" id="cap">
+            <div class="tab on" data-z="chill" onclick="setZone(this)">🥬 冷藏</div>
+            <div class="tab" data-z="freeze" onclick="setZone(this)">🧊 冷冻</div>
+            <div class="tab" data-z="ambient" onclick="setZone(this)">🌾 常温</div>
+          </div>
+          <div id="crossBox"></div>
+          <div class="grid" id="grid"></div>
+        </div>
+        <!-- 食谱 -->
+        <div class="page" id="p-recipe">
+          <div class="switch-line">
+            <div><div class="lbl">临期优先</div><span class="hint">优先消耗 24h 内到期的食材</span></div>
+            <label class="swt"><input type="checkbox" onchange="renderRecipes()"><span class="tr"></span><span class="kn"></span></label>
+          </div>
+          <div class="r-list" id="rlist"></div>
+        </div>
+        <!-- 设置 -->
+        <div class="page" id="p-set">
+          <div class="set">
+            <div class="dd-wrap" id="skinWrap">
+              <div class="set-card" onclick="toggleDropdown('skinWrap')">
+                <div class="set-ic">🎨</div><div><div class="set-n" id="skinName">玻璃动效</div><div class="set-s" id="skinDesc">磨砂 &amp; 光晕</div></div>
+                <div class="right chev" style="transform:rotate(0)">▾</div>
+              </div>
+              <div class="menu">
+                <div class="chips">
+                  <button class="chip on" data-s="glass" onclick="pickSkin(this)">玻璃动效</button>
+                  <button class="chip" data-s="classic" onclick="pickSkin(this)">经典原味</button>
+                  <button class="chip" onclick="toast('自定义皮肤 🔧 开放中')">＋ 自定义</button>
+                </div>
+              </div>
+            </div>
+            <div class="dd-wrap" id="iconWrap">
+              <div class="set-card" onclick="toggleDropdown('iconWrap')">
+                <div class="set-ic">🖼️</div><div><div class="set-n" id="iconName">本色拟物</div><div class="set-s" id="iconDesc">系统 emoji · 一对一词典</div></div>
+                <div class="right chev" style="transform:rotate(0)">▾</div>
+              </div>
+              <div class="menu">
+                <div class="chips">
+                  <button class="chip on" data-i="a" onclick="pickIcon(this)">本色拟物</button>
+                  <button class="chip" data-i="b" onclick="pickIcon(this)">手绘线描</button>
+                  <button class="chip" data-i="c" onclick="pickIcon(this)">奶油贴纸</button>
+                </div>
+              </div>
+            </div>
+            <div class="set-card"><div class="set-ic">🌙</div><div><div class="set-n">夜间模式</div><div class="set-s">深夜厨房 · 深底浅字</div></div>
+              <div class="right"><label class="swt"><input type="checkbox" onchange="toggleNight()"><span class="tr"></span><span class="kn"></span></label></div></div>
+            <div class="set-card"><div class="set-ic">⏰</div><div><div class="set-n">临期提醒</div><div class="set-s">提前多久提醒</div></div>
+              <div class="right"><input type="range" min="6" max="72" value="24" oninput="document.getElementById('remV').textContent=this.value+'h'"><span style="font-size:12px;color:var(--ink2);margin-left:8px" id="remV">24h</span></div></div>
+            <div class="set-card"><div class="set-ic">☁️</div><div><div class="set-n">数据同步</div><div class="set-s">上次同步 刚刚</div></div>
+              <div class="right" style="display:flex;align-items:center;gap:10px"><span class="dotg"></span><button class="pill-btn" onclick="syncNow(this)">立即同步</button></div></div>
+            <div class="set-card"><div class="set-ic">🩺</div><div><div class="set-n">系统体检</div><div class="set-s">上次体检：全部健康</div></div>
+              <div class="right"><button class="pill-btn" onclick="toast('体检完成 · 全部健康 ✓')">一键体检</button></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 详情 -->
+    <div id="detail">
+      <div class="detail-head">
+        <button class="circle-btn" onclick="closeDetail()" title="返回">←</button>
+        <div class="t">菜品详情</div>
+      </div>
+      <div id="detailScroll"></div>
+    </div>
+
+    <!-- 编辑浮窗 -->
+    <div class="overlay" id="ovEdit" onclick="if(event.target===this)closeEdit()">
+      <div class="modal">
+        <div class="m-head"><div class="m-title">编辑 · <span id="eName"></span></div><button class="m-close" onclick="closeEdit()">✕</button></div>
+        <span class="zbadge" id="eTag" style="margin:0 0 4px"></span>
+        <div class="m-label">分区</div>
+        <div class="chips" id="eZone"></div>
+        <div class="m-label">数量 · 可输入或步进（±1 / ±0.1）</div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <button class="circle-btn" style="width:34px;height:34px;font-size:12px" onclick="eQtyStep(-1)">−1</button>
+          <button class="circle-btn" style="width:34px;height:34px;font-size:11px" onclick="eQtyStep(-0.1)">−.1</button>
+          <input class="num" id="eQtyV" value="1" inputmode="decimal" onchange="eQtySave(this.value)" style="flex:1">
+          <button class="circle-btn" style="width:34px;height:34px;font-size:11px" onclick="eQtyStep(0.1)">+.1</button>
+          <button class="circle-btn" style="width:34px;height:34px;font-size:12px" onclick="eQtyStep(1)">+1</button>
+        </div>
+        <div class="m-label">单位</div>
+        <div class="chips" id="eUnit"></div>
+        <div class="m-actions">
+          <button class="m-danger" onclick="doDelete()">删除</button>
+          <button class="m-primary" onclick="eQtyDone()">完成</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 文字录入浮窗 -->
+    <div class="overlay" id="ovAdd" onclick="if(event.target===this)closeAdd()">
+      <div class="modal">
+        <div class="m-head"><div class="m-title">添加食材</div><button class="m-close" onclick="closeAdd()">✕</button></div>
+        <div class="m-label">📝 一句话交给 DeepSeek</div>
+        <textarea class="num" id="aiText" rows="2" placeholder="如：今天买了半斤猪肉和三个番茄" style="width:100%;resize:none;text-align:left;font-weight:600"></textarea>
+        <div id="aiList" style="margin-top:8px"></div>
+        <div class="m-actions">
+          <button class="m-ghost" onclick="closeAdd()">取消</button>
+          <button class="m-primary" id="addMainBtn" onclick="aiParseNow()">识别</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="nav" id="nav">
+      <div class="nav-ind" id="navInd"></div>
+      <button class="on" onclick="showPage('inv')"><span style="font-size:19px">🗄️</span>库存</button>
+      <button onclick="showPage('recipe')"><span style="font-size:19px">🍳</span>食谱</button>
+      <button onclick="showPage('set')"><span style="font-size:19px">⚙️</span>设置</button>
+    </div>
+      <button class="fab" id="fabAdd" onclick="openAdd()" title="文字录入食材">＋</button>
+    <div class="homebar"></div>
+    <div class="toast" id="toast"></div>
+  </div>
+</div>
+
+<script>
+  var ZONES = {chill:'冷藏', freeze:'冷冻', ambient:'常温'};
+  var CATS = ['全部','蔬菜','水果','乳品','肉蛋','海鲜','主食','调味','速冻'];
+  /* 三套图标：A emoji 一对一词典（含同义词）/ B 线描 / C 贴纸 */
+  var EMO = {
+    /* 蔬菜（含同义词/别名） */
+    '番茄':'🍅','西红柿':'🍅','圣女果':'🍅','小番茄':'🍅','黄瓜':'🥒','青瓜':'🥒','土豆':'🥔','马铃薯':'🥔','胡萝卜':'🥕','红萝卜':'🥕','白萝卜':'🥕','洋葱':'🧅','青椒':'🌶️','辣椒':'🌶️','菜椒':'🌶️','甜椒':'🌶️','彩椒':'🌶️','茄子':'🍆','白菜':'🥬','大白菜':'🥬','娃娃菜':'🥬','生菜':'🥬','油麦菜':'🥬','莴笋':'🥬','菠菜':'🥬','油菜':'🥬','上海青':'🥬','芹菜':'🥬','韭菜':'🥬','蒜':'🧄','大蒜':'🧄','姜':'🫚','生姜':'🫚','葱':'🧅','小葱':'🧅','香菜':'🌿','芫荽':'🌿','莲藕':'🪷','藕':'🪷','山药':'🥔','南瓜':'🎃','冬瓜':'🥒','丝瓜':'🥒','苦瓜':'🥒','西葫芦':'🥒','豆角':'🫘','四季豆':'🫘','豇豆':'🫘','豌豆':'🫛','玉米':'🌽','玉米粒':'🌽','蘑菇':'🍄','香菇':'🍄','金针菇':'🍄','杏鲍菇':'🍄','平菇':'🍄','海带':'🌿','豆芽':'🌱','黄豆芽':'🌱','绿豆芽':'🌱','豆腐':'🧊','腐竹':'🌿',
+    /* 水果 */
+    '苹果':'🍎','梨':'🍐','雪梨':'🍐','香蕉':'🍌','橙子':'🍊','脐橙':'🍊','橘子':'🍊','砂糖橘':'🍊','柚子':'🍊','柠檬':'🍋','葡萄':'🍇','提子':'🍇','草莓':'🍓','蓝莓':'🫐','西瓜':'🍉','哈密瓜':'🍈','甜瓜':'🍈','桃':'🍑','桃子':'🍑','油桃':'🍑','李子':'🍑','樱桃':'🍒','车厘子':'🍒','猕猴桃':'🥝','奇异果':'🥝','芒果':'🥭','菠萝':'🍍','凤梨':'🍍','石榴':'🫘','柿子':'🫘','桂圆':'🫘','龙眼':'🫘','荔枝':'🫘',
+    /* 肉蛋 */
+    '猪肉':'🥩','五花肉':'🥩','里脊':'🥩','排骨':'🥩','猪排':'🥩','牛肉':'🥩','牛排':'🥩','牛腩':'🥩','羊肉':'🥩','羊排':'🥩','鸡':'🍗','鸡肉':'🍗','鸡腿':'🍗','鸡翅':'🍗','鸡胸':'🍗','鸭':'🦆','鸭肉':'🦆','鸡蛋':'🥚','鸭蛋':'🥚','咸鸭蛋':'🥚','皮蛋':'🥚','松花蛋':'🥚','火腿':'🥓','香肠':'🌭','腊肠':'🌭','培根':'🥓',
+    /* 海鲜 */
+    '鱼':'🐟','鲤鱼':'🐟','草鱼':'🐟','鲫鱼':'🐟','带鱼':'🐟','三文鱼':'🐟','鲈鱼':'🐟','虾':'🦐','虾仁':'🦐','基围虾':'🦐','小龙虾':'🦞','螃蟹':'🦀','蟹':'🦀','蛤蜊':'🦪','花蛤':'🦪','鱿鱼':'🦑','墨鱼':'🦑','章鱼':'🐙','扇贝':'🦪','生蚝':'🦪',
+    /* 乳品 */
+    '牛奶':'🥛','鲜奶':'🥛','纯牛奶':'🥛','酸奶':'🥛','乳酸菌':'🥛','奶酪':'🧀','芝士':'🧀','黄油':'🧈','奶油':'🍦',
+    /* 主食 */
+    '大米':'🍚','米':'🍚','面粉':'🌾','面':'🍜','面条':'🍜','挂面':'🍜','拉面':'🍜','面包':'🍞','饺子':'🥟','水饺':'🥟','包子':'🥟','馒头':'🥟','馄饨':'🥟','米粉':'🍜','河粉':'🍜','燕麦':'🌾','麦片':'🌾','红薯':'🍠','地瓜':'🍠','紫薯':'🍠','年糕':'🍡','汤圆':'🍡','粽子':'🍙',
+    /* 调味 */
+    '盐':'🧂','食盐':'🧂','糖':'🍬','白糖':'🍬','砂糖':'🍬','冰糖':'🍬','酱油':'🫙','生抽':'🫙','老抽':'🫙','醋':'🫙','陈醋':'🫙','香醋':'🫙','蚝油':'🫙','料酒':'🫙','豆瓣酱':'🌶️','辣酱':'🌶️','番茄酱':'🥫','沙拉酱':'🥫','香油':'🫙','麻油':'🫙','胡椒粉':'⚫','胡椒':'⚫','花椒':'⚫','八角':'⚫','大料':'⚫','鸡精':'⚫','味精':'⚫','辣椒粉':'🌶️','孜然粉':'🌶️',
+    /* 饮料 & 其他 */
+    '可乐':'🥤','雪碧':'🥤','咖啡':'☕','茶':'🍵','茶叶':'🍵','啤酒':'🍺','果汁':'🧃','橙汁':'🧃','蜂蜜':'🍯','红枣':'🫘','枸杞':'🫘','花生':'🥜','瓜子':'🌰','核桃':'🌰','坚果':'🥜','薯片':'🍟',
+    /* 补充：热带/奇异食材 & 硬壳类 */
+    '榴莲':'🍈','菠萝蜜':'🍈','山竹':'🫐','牛油果':'🥑','火龙果':'🍈','百香果':'🍋','椰子':'🥥','荔枝':'🫘','杨梅':'🫐','桑葚':'🫐','龙虾':'🦞','波士顿龙虾':'🦞','帝王蟹':'🦀','梭子蟹':'🦀','海参':'🦪','鲍鱼':'🦪','海胆':'🦔','花甲':'🦪','蛏子':'🦪','海蜇':'🦑','海带结':'🌿'
+  };
+  /* 未收录食材按尾字/特征智能兜底（命中率≈9 成） */
+  var EMO_SUF = [['椒','🌶️'],['菇','🍄'],['瓜','🍉'],['豆','🫘'],['肉','🥩'],['奶','🥛'],['鱼','🐟'],['虾','🦐'],['蟹','🦀'],['贝','🦪'],['果','🍎'],['菜','🥬'],['蛋','🥚'],['梨','🍐'],['桃','🍑'],['莓','🍓'],['柚','🍊'],['橘','🍊'],['橙','🍊'],['榴','🍈'],['龙','🦞'],['椰','🥥'],['菇','🍄']];
+  function fetchEmo(n, tag){
+    if (EMO[n]) return EMO[n];
+    for (var i = 0; i < EMO_SUF.length; i++){ if (n.indexOf(EMO_SUF[i][0]) >= 0) return EMO_SUF[i][1]; }
+    return EMO_CAT[tag] || '🥬';
+  }
+  var EMO_CAT = {蔬菜:'🥬',水果:'🍊',乳品:'🥛',肉蛋:'🥩',海鲜:'🦐',主食:'🍚',调味:'🧂',速冻:'🧊'};
+  var STICK = {veg:['#C7E0B4','#93BE74'], fru:['#F7D9A8','#EFB263'], meat:['#F3C3B0','#E59B82'], dairy:['#F8EBD3','#E8CFA0'], froz:['#D3E4F2','#A9C7DE']};
+  var DATA = {
+    chill: [
+      {n:'西红柿', q:7, u:'个', tag:'蔬菜', k:'veg', w:92, c:'#5FA45C', note:'很新鲜'},
+      {n:'鸡蛋',   q:1, u:'个', tag:'肉蛋', k:'meat', w:100, c:'#5FA45C', note:'很新鲜'},
+      {n:'白菜',   q:1, u:'颗', tag:'蔬菜', k:'veg', w:100, c:'#5FA45C', note:'很新鲜'},
+      {n:'青椒',   q:1, u:'个', tag:'蔬菜', k:'veg', w:95, c:'#5FA45C', note:'很新鲜'}
+    ],
+    freeze: [
+      {n:'虾仁', q:1, u:'袋', tag:'海鲜', k:'froz', w:90, c:'#5FA45C', note:'状态良好'},
+      {n:'牛排', q:2, u:'块', tag:'肉蛋', k:'meat', w:75, c:'#5FA45C', note:'状态良好'}
+    ],
+    ambient: [
+      {n:'牛奶', q:1, u:'盒', tag:'乳品', k:'dairy', w:60, c:'#E9B960', note:'注意了'},
+      {n:'蜂蜜', q:1, u:'罐', tag:'调味', k:'cond', w:85, c:'#5FA45C', note:'状态良好'}
+    ]
+  };
+  var RECIPES = [
+    {n:'番茄牛腩煲', t:'40 分钟', e:'🍲', b:1, tags:['番茄','牛排','洋葱'],
+     steps:['牛排切块，冷水下锅焯至浮沫。','番茄炒出沙，加开水烧开。','下牛排转小火炖 40 分钟，调味。'],
+     ing:[{n:'番茄',u:'个',b:3},{n:'牛排',u:'克',b:250}]},
+    {n:'滑蛋虾仁', t:'15 分钟', e:'🍳', b:0, tags:['鸡蛋','虾仁'],
+     steps:['虾仁料酒腌 5 分钟。','鸡蛋打散加少许盐。','宽油滑熟虾仁，倒蛋液轻推至凝固。'],
+     ing:[{n:'虾仁',u:'克',b:200},{n:'鸡蛋',u:'个',b:4}]},
+    {n:'手撕凉拌生菜', t:'10 分钟', e:'🥗', b:0, tags:['生菜','蒜'],
+     steps:['生菜洗净手撕。','蒜末热油泼香，生抽香醋调汁。','淋上拌匀，撒芝麻。'],
+     ing:[{n:'生菜',u:'颗',b:1},{n:'蒜',u:'瓣',b:4}]},
+    {n:'玉米浓汤', t:'25 分钟', e:'🌽', b:1, tags:['玉米粒','牛奶'],
+     steps:['玉米粒一半打成浆。','牛奶加玉米浆煮开。','加玉米粒煮 5 分钟调味。'],
+     ing:[{n:'玉米粒',u:'克',b:200},{n:'牛奶',u:'盒',b:1}]},
+    {n:'蜂蜜烤苹果', t:'20 分钟', e:'🍎', b:0, tags:['苹果','蜂蜜'],
+     steps:['苹果去核切片。','刷蜂蜜煎至金黄。','撒芝麻出锅。'],
+     ing:[{n:'苹果',u:'个',b:2},{n:'蜂蜜',u:'勺',b:2}]}
+  ];
+
+  var curZone='chill', curCat=null, curDetail=null, iconSet='a';
+  var eId=null, eQ=1, eZ='chill', eU='个';
+  var $=function(id){return document.getElementById(id);};
+
+  function iconOf(it){
+    if (iconSet === 'a') return '<span style="font-size:23px">' + fetchEmo(it.n, it.tag) + '</span>';
+    if (iconSet === 'b') return '<span style="width:34px;height:34px;border-radius:12px;background:var(--lettuce-soft);border:1px solid var(--lettuce);color:var(--lettuce);font-weight:800;font-size:16px;display:flex;align-items:center;justify-content:center">' + it.n.charAt(0) + '</span>';
+    var s = STICK[it.k] || STICK.veg;
+    return '<span style="width:34px;height:34px;display:flex;align-items:center;justify-content:center;border-radius:14px;background:linear-gradient(155deg,' + s[0] + ',' + s[1] + ');box-shadow:inset 0 2px 4px rgba(255,255,255,.35), 0 3px 8px rgba(97,76,50,.15);font-size:18px">' + fetchEmo(it.n, it.tag) + '</span>';
+  }
+  function visible(){ return DATA[curZone].filter(function(it){ return !curCat || it.tag === curCat; }); }
+  function cardHtml(it, i){
+    return '<div class="card" style="animation-delay:' + (i * 40) + 'ms" onclick="openEditItem(' + DATA[curZone].indexOf(it) + ')">' +
+      '<div class="r1"><div class="tile">' + iconOf(it) + '</div>' +
+      '<div class="nm">' + it.n + '</div><div class="qt">' + it.q + ' ' + it.u + '</div></div>' +
+      '<div class="r2">' + (curCat ? '<span class="zbadge">' + ZONES[it.zone || curZone] + '</span>' : '') +
+      '<span style="margin-left:6px">' + it.note + '</span></div>' +
+      '<div class="fresh" style="--c:' + it.c + ';--w:' + it.w + '%"><i></i></div></div>';
+  }
+  function renderZone(){
+    var list = visible();
+    $('grid').innerHTML = list.length
+      ? list.map(cardHtml).join('')
+      : '<div class="empty">这个分区还没有食材 🌿<br>点右上角 🔍 可跨区查看其他大类</div>';
+    $('cap').classList.toggle('off', !!curCat);
+    $('crossBox').innerHTML = curCat
+      ? '<div class="cross-note"><span>🌏 跨区查看 ·「' + curCat + '」</span><button onclick="pickCat(\'全部\')">退出筛选</button></div>'
+      : '';
+  }
+  function banner(){
+    var today = new Date().toDateString();
+    var rec = JSON.parse(localStorage.getItem('xcRemind') || '{}');
+    if (rec.date === today && rec.closed) return;
+    var n = 1;
+    $('bannerBox').innerHTML = '<div class="banner" id="banner"><div class="dot"></div>' + n + ' 件食材将在 24 小时内到期 · 建议今晚吃掉 🥢' +
+      '<button onclick="dismissBanner()" style="margin-left:auto;border:none;background:none;color:var(--corn);font-size:16px;cursor:pointer" title="今日不再提醒">✕</button></div>';
+  }
+  function dismissBanner(){
+    localStorage.setItem('xcRemind', JSON.stringify({date: new Date().toDateString(), closed: true}));
+    var b = $('banner'); if (b) b.remove();
+    toast('今日不再提醒 · 明天再看 🌿');
+  }
+  function setZone(el){
+    curZone = el.dataset.z;
+    document.querySelectorAll('#cap .tab').forEach(function(t){ t.classList.remove('on'); });
+    el.classList.add('on'); renderZone();
+    toast('已切换到「' + ZONES[curZone] + '」');
+  }
+  function toggleFilter(){ $('fw').classList.toggle('open'); if ($('fw').classList.contains('open')) renderFilter(); }
+  function renderFilter(){
+    $('fp').innerHTML = CATS.map(function(c){
+      var cnt = c === '全部' ? '' : '<span class="cnt">' + Object.keys(DATA).reduce(function(s,k){ return s + DATA[k].filter(function(i){ return i.tag === c; }).length; }, 0) + '</span>';
+      return '<button class="fp-opt' + ((curCat === c) || (!curCat && c === '全部') ? ' on' : '') + '" onclick="pickCat(\'' + c + '\')">' + c + cnt + '<span class="ok">✓</span></button>';
+    }).join('');
+  }
+  function pickCat(c){
+    curCat = c === '全部' ? null : c;
+    $('fw').classList.remove('open');
+    renderZone();
+    toast(curCat ? '跨区查看 · ' + curCat + ' 🍃' : '已退出筛选 · 按分区查看');
+  }
+  document.addEventListener('click', function(e){
+    var fw = $('fw');
+    if (fw.classList.contains('open') && !fw.contains(e.target)) fw.classList.remove('open');
+  });
+  function doSync(btn){
+    if (btn.classList.contains('spin')) return;
+    btn.classList.add('spin');
+    setTimeout(function(){ btn.classList.remove('spin'); toast('库存已同步 ✓ · 数据 30 秒内互通'); }, 900);
+  }
+  /* 食谱刷新（右上角专属） */
+  function doRefresh(btn){
+    if (btn.classList.contains('spin')) return;
+    btn.classList.add('spin');
+    setTimeout(function(){
+      btn.classList.remove('spin');
+      renderRecipes();
+      toast('已刷新 ' + RECIPES.length + ' 道菜谱 ✨');
+    }, 900);
+  }
+
+  function swOn(){ return !!document.querySelector('#p-recipe .swt input').checked; }
+  function renderRecipes(){
+    $('rlist').innerHTML = RECIPES.map(function(r, i){
+      return '<div class="r-card" style="animation-delay:' + (i * 60) + 'ms" onclick="openDetail(' + i + ')">' +
+        '<div class="r-head"><div class="emo">' + r.e + '</div>' +
+        '<div class="rm"><div class="rn">' + r.n + '</div><div class="rt">⏱ ' + r.t + '</div>' +
+        '<div class="r-tags">' + r.tags.map(function(x){ return '<span class="r-tag">' + x + '</span>'; }).join('') + '</div></div>' +
+        (r.b && swOn() ? '<span class="r-badge">临期优先</span>' : '') + '<span class="r-arrow">›</span></div></div>';
+    }).join('');
+  }
+  /* 按页按钮契约：库存=筛选+同步；食谱=刷新；设置=无；FAB 仅库存 */
+  function showPage(p){
+    document.querySelectorAll('.page').forEach(function(x){ x.classList.remove('on'); });
+    $('p-' + p).classList.add('on');
+    $('hdT').textContent = p === 'inv' ? '库存' : p === 'recipe' ? '菜谱' : '设置';
+    var idx = p === 'inv' ? 0 : p === 'recipe' ? 1 : 2;
+    $('navInd').style.left = 'calc(' + (idx * 100 / 3) + '% + 8px)';
+    document.querySelectorAll('#nav button').forEach(function(b, j){ b.classList.toggle('on', j === idx); });
+    $('fw').style.display = p === 'inv' ? '' : 'none';
+    $('btnSync').style.display = p === 'inv' ? '' : 'none';
+    $('btnRefresh').style.display = p === 'recipe' ? '' : 'none';
+    $('fabAdd').classList.toggle('hide', p !== 'inv');
+  }
+  function toggleNight(){
+    var b = document.body;
+    b.dataset.theme = b.dataset.theme === 'dark' ? 'light' : 'dark';
+    if (document.querySelector('#p-set .swt input')) document.querySelector('#p-set .swt input').checked = (b.dataset.theme === 'dark');
+    toast(b.dataset.theme === 'dark' ? '深夜厨房 · 灯光渐暗 🌙' : '奶油白天 ☀️');
+  }
+  function toggleDropdown(wrapId){
+    var w = $(wrapId);
+    var open = w.classList.contains('open');
+    ['skinWrap','iconWrap'].forEach(function(x){
+      var el = $(x); el.classList.remove('open');
+      var c = el.querySelector('.chev'); if (c) c.style.transform = '';
+    });
+    if (!open){ w.classList.add('open'); var c = w.querySelector('.chev'); if (c) c.style.transform = 'rotate(180deg)'; }
+  }
+  function closeWraps(){ ['skinWrap','iconWrap'].forEach(function(x){ var el = $(x); el.classList.remove('open'); var c = el.querySelector('.chev'); if (c) c.style.transform = ''; }); }
+  function pickSkin(btn){
+    var s = btn.dataset.s;
+    $('skinName').textContent = s === 'glass' ? '玻璃动效' : '经典原味';
+    $('skinDesc').textContent = s === 'glass' ? '磨砂 & 光晕' : '纯奶油风';
+    btn.parentNode.querySelectorAll('.chip').forEach(function(x){ x.classList.remove('on'); });
+    btn.classList.add('on');
+    closeWraps();
+    toast('皮肤已切换 · ' + (s === 'glass' ? '玻璃动效' : '经典原味'));
+  }
+  function pickIcon(btn){
+    iconSet = btn.dataset.i;
+    var names = {a:'本色拟物', b:'手绘线描', c:'奶油贴纸'};
+    var descs = {a:'系统 emoji · 一对一词典', b:'首字磁贴 · 精细化中', c:'色块高光 · 精细化中'};
+    $('iconName').textContent = names[iconSet];
+    $('iconDesc').textContent = descs[iconSet];
+    btn.parentNode.querySelectorAll('.chip').forEach(function(x){ x.classList.remove('on'); });
+    btn.classList.add('on');
+    closeWraps();
+    renderZone();
+    toast('图标已切换 · ' + names[iconSet]);
+  }
+  function syncNow(btn){
+    if (btn.dataset.busy) return;
+    btn.dataset.busy = '1';
+    btn.textContent = '同步中…';
+    setTimeout(function(){
+      btn.textContent = '已同步 ✓';
+      toast('数据已同步 ✓ · 双端 30 秒内互通');
+      setTimeout(function(){ btn.textContent = '立即同步'; btn.dataset.busy = ''; }, 1600);
+    }, 900);
+  }
+
+  /* 编辑浮窗：数量自由输入（一位小数）· 空白退出 · 扣除/删除分离 */
+  function npm(v){ var x = parseFloat(v); return isNaN(x) ? null : Math.round(x * 10) / 10; }
+  function openEditItem(realIdx){
+    var it = DATA[curZone][realIdx];
+    eId = realIdx; eQ = it.q; eZ = curZone; eU = it.u;
+    $('eName').textContent = it.n;
+    $('eTag').textContent = it.tag;
+    $('eQtyV').value = it.q;
+    buildChips('eZone', ['冷藏','冷冻','常温'], ZONES[eZ], function(v){
+      eZ = Object.keys(ZONES).filter(function(k){ return ZONES[k] === v; })[0];
+    });
+    buildChips('eUnit', ['个','盒','袋','克','瓶','颗','块'], eU, function(v){ eU = v; });
+    $('ovEdit').classList.add('show');
+  }
+  function buildChips(boxId, list, cur, pick){
+    var box = $(boxId); box.innerHTML = '';
+    list.forEach(function(v){
+      var b = document.createElement('button');
+      b.className = 'chip' + (v === cur ? ' on' : '');
+      b.textContent = v;
+      b.onclick = function(){ pick(v); buildChips(boxId, list, v, pick); };
+      box.appendChild(b);
+    });
+  }
+  function closeEdit(){ $('ovEdit').classList.remove('show'); }
+  function eQtySave(v){
+    var it = DATA[curZone][eId]; if (!it) return;
+    var x = npm(v); if (x !== null){ it.q = Math.max(0.1, x); it.u = eU; }
+    toast('已保存 · ' + it.n + ' ' + it.q + ' ' + it.u);
+    renderZone();
+  }
+  function eQtyStep(d){
+    var it = DATA[curZone][eId]; if (!it) return;
+    it.q = Math.max(0.1, Math.round((it.q + d) * 10) / 10);
+    $('eQtyV').value = it.q;
+    renderZone();
+  }
+  function eQtyDone(){
+    var it = DATA[curZone][eId];
+    if (it){
+      var x = npm($('eQtyV').value); if (x !== null) it.q = Math.max(0.1, x);
+      it.u = eU;
+      if (eZ !== curZone){
+        it.zone = eZ; DATA[eZ].push(it); DATA[curZone].splice(eId, 1);
+        setZoneAt(eZ);
+        toast('已搬去「' + ZONES[eZ] + '」· ' + it.n + ' ' + it.q + ' ' + it.u);
+      } else {
+        renderZone();
+        toast('已保存 · ' + it.n + ' ' + it.q + ' ' + it.u);
+      }
+    } else {
+      toast('该食材已不在库存 🌿');
+    }
+    closeEdit();
+  }
+  function doDelete(){
+    var it = DATA[curZone][eId]; if (!it) return;
+    DATA[curZone].splice(eId, 1);
+    toast('已删除 · ' + it.n + ' 🗑');
+    closeEdit(); renderZone();
+  }
+  function setZoneAt(k){
+    curZone = k;
+    document.querySelectorAll('#cap .tab').forEach(function(t){ t.classList.toggle('on', t.dataset.z === k); });
+    renderZone();
+  }
+
+  /* 文字录入（一句话 → 智能识别 → 逐项可编辑：名称/数量/单位/分区） */
+  var addItems = [];
+  function openAdd(){
+    addItems = [];
+    $('aiText').value = ''; $('aiList').innerHTML = '';
+    var b = $('addMainBtn'); b.textContent = '识别'; b.setAttribute('onclick', 'aiParseNow()');
+    $('ovAdd').classList.add('show');
+  }
+  function closeAdd(){ $('ovAdd').classList.remove('show'); }
+  function aiParseNow(){
+    var text = $('aiText').value.trim();
+    if (!text){ toast('先输入一句话 🌿'); return; }
+    $('aiList').innerHTML = '<div style="font-size:12px;color:var(--ink2)">⏳ AI 识别中…</div>';
+    setTimeout(function(){
+      addItems = localParse(text);
+      $('aiList').innerHTML = addItems.map(function(x, i){
+        return '<div style="padding:8px 0;border-bottom:.5px solid var(--line)">' +
+          '<div style="display:flex;align-items:center;gap:6px">' +
+          '<input class="num" id="an' + i + '" value="' + x.name + '" style="flex:1;text-align:left;font-weight:700" oninput="onNameIn(' + i + ',this.value)">' +
+          '<input class="num" id="aq' + i + '" value="' + x.qty + '" inputmode="decimal" style="width:52px">' +
+          '<input class="num" id="au' + i + '" value="' + x.unit + '" style="width:44px">' +
+          '<button class="m-close" style="width:20px;height:20px;font-size:10px" onclick="this.parentNode.parentNode.style.display=\'none\'">✕</button></div>' +
+          '<div style="display:flex;align-items:center;gap:6px;margin-top:7px">' +
+          '<span id="at' + i + '" style="font-size:11px;color:var(--corn);font-weight:700">' + x.cat + '</span><span style="flex:1"></span>' +
+          '<button class="chip' + (x.zone === 'chill' ? ' on' : '') + '" style="padding:3px 10px;font-size:11.5px" onclick="onZoneIn(' + i + ',\'chill\',this)">冷藏</button>' +
+          '<button class="chip' + (x.zone === 'freeze' ? ' on' : '') + '" style="padding:3px 10px;font-size:11.5px" onclick="onZoneIn(' + i + ',\'freeze\',this)">冷冻</button>' +
+          '<button class="chip' + (x.zone === 'ambient' ? ' on' : '') + '" style="padding:3px 10px;font-size:11.5px" onclick="onZoneIn(' + i + ',\'ambient\',this)">常温</button>' +
+          '</div></div>';
+      }).join('');
+      var b = $('addMainBtn'); b.textContent = '添加'; b.setAttribute('onclick', 'addConfirm()');
+    }, 700);
+  }
+  /* 规则猜料（演示版；真机由 DeepSeek 返回分类，此为兜底） */
+  function guessTag(n){
+    var FRU = ['苹果','梨','橙','橘','柚','柠檬','莓','葡萄','提子','香蕉','芒果','榴莲','菠萝','桃','樱桃','猕猴桃','奇异果','山楂','柿子','石榴','枣','枸杞','西瓜','哈密瓜','甜瓜'];
+    if (FRU.some(function(k){ return n.indexOf(k) >= 0; })) return '水果';
+    if (/椒|菇|菜|豆|茄|芹|韭|蒜|姜|葱|藕|薯|卜|笋|苗|芽|瓜|番茄|西红柿|玉米|豆腐|山药|南瓜|冬瓜|苦瓜|丝瓜|莲藕|菌|海带|皮蛋|.子/.test(n)) return '蔬菜';
+    if (/肉|排骨|鸡|鸭|鹅|蛋|火腿|香肠|培根|牛|羊|猪/.test(n)) return '肉蛋';
+    if (/鱼|虾|蟹|贝|蛤|蛏|鱿|章|海参|生蚝|鲍|龙虾/.test(n)) return '海鲜';
+    if (/奶|酪|芝士|黄油|奶油|酸奶/.test(n)) return '乳品';
+    if (/米|面|粉|包|饺|馒|馄饨|年糕|汤圆|粽子|麦/.test(n)) return '主食';
+    if (/盐|糖|酱|醋|油|料酒|胡椒|花椒|八角|蚝|味精|鸡精|孜然|咖喱/.test(n)) return '调味';
+    if (/可乐|雪碧|咖啡|茶|啤|果汁|橙汁/.test(n)) return '调味';
+    return '蔬菜';
+  }
+  function tagKey(t){ return {蔬菜:'veg',水果:'fru',乳品:'dairy',肉蛋:'meat',海鲜:'froz',主食:'base',调味:'cond',速冻:'froz'}[t] || 'veg'; }
+  function localParse(text){
+    var out = [];
+    text.split(/[，,、和\s]+/).filter(Boolean).forEach(function(p){
+      var nm = p.match(/[\u4e00-\u9fa5A-Za-z]+/);
+      var name = nm ? nm[0] : p;
+      var nums = p.match(/\d+(?:\.\d+)?/);
+      var qty = nums ? parseFloat(nums[0]) : 1;
+      var um = p.match(/(个|盒|袋|克|瓶|颗|块|把|条|罐|斤|两|勺)/);
+      var unit = (um ? um[1] : '个');
+      out.push({name: name, qty: qty, unit: unit, cat: guessTag(name), zone: guessZone(guessTag(name))});
+    });
+    return out;
+  }
+  function onNameIn(i, v){
+    addItems[i].cat = guessTag(v.trim());
+    var t = $('at' + i); if (t) t.textContent = addItems[i].cat;
+  }
+  /* 分区智能分配：调味/主食→常温，肉蛋/海鲜→冷冻，其余→冷藏 */
+  function guessZone(tag){
+    return (tag === '调味' || tag === '主食') ? 'ambient'
+      : (tag === '肉蛋' || tag === '海鲜') ? 'freeze' : 'chill';
+  }
+  function onZoneIn(i, z, btn){
+    addItems[i].zone = z;
+    Array.prototype.forEach.call(btn.parentNode.querySelectorAll('.chip'), function(c){ c.classList.toggle('on', c === btn); });
+  }
+  function addConfirm(){
+    var added = 0;
+    addItems.forEach(function(x, i){
+      var nameEl = $('an' + i); if (!nameEl || nameEl.parentNode.parentNode.style.display === 'none') return;
+      var name = nameEl.value.trim(); if (!name) return;
+      var qty = npm($('aq' + i).value) || x.qty;
+      var unit = ($('au' + i).value || '').trim() || x.unit;
+      var tag = ($('at' + i) ? $('at' + i).textContent : x.cat) || '蔬菜';
+      var zone = x.zone || 'chill';
+      var it = {n: name, q: qty, u: unit, tag: tag, k: tagKey(tag), zone: zone, w: 100, c: '#5FA45C', note: '很新鲜'};
+      DATA[zone].unshift(it);
+      added++;
+    });
+    closeAdd(); renderZone();
+    toast('已加入 ' + added + ' 项食材 ✓');
+  }
+
+  /* 详情 */
+  function openDetail(i){
+    curDetail = i; var r = RECIPES[i];
+    $('detail').classList.add('on');
+    var h = '<div class="d-hero"><div class="emo">' + r.e + '</div>' +
+      '<div><div class="d-name">' + r.n + '</div><div class="d-meta">⏱ ' + r.t + '</div></div>' +
+      '<div class="d-right">' + (r.b && swOn() ? '<span class="r-badge">临期优先</span>' : '') +
+      '<button class="copy-btn" onclick="toast(\'菜名已复制 ✓ 去抖音搜「' + r.n + '」\')">📋 复制菜名</button></div></div>' +
+      '<div style="font-size:12px;font-weight:700;color:var(--ink2);margin:0 0 6px">制作步骤</div>' +
+      r.steps.map(function(s, j){ return '<div class="step"><div class="sn">' + (j + 1) + '</div><div class="st">' + s + '</div></div>'; }).join('') +
+      '<div style="font-size:12px;font-weight:700;color:var(--ink2);margin:12px 0 6px">扣除用料 · 已吃扣库存</div>';
+    r.ing.forEach(function(x, j){
+      h += '<div class="ingline"><div><div class="nm">' + x.n + '</div><div class="ct">默认用量</div></div>' +
+        '<div style="display:flex;gap:5px;align-items:center">' +
+        '<button class="circle-btn" style="width:30px;height:30px;font-size:11px" onclick="ingQty(' + j + ',-1)">−1</button>' +
+        '<button class="circle-btn" style="width:30px;height:30px;font-size:10px" onclick="ingQty(' + j + ',-0.1)">−.1</button>' +
+        '<input class="num" id="iv' + j + '" value="' + x.b + '" inputmode="decimal" style="width:56px" onchange="ingQtyIn(' + j + ',this.value)">' +
+        '<button class="circle-btn" style="width:30px;height:30px;font-size:10px" onclick="ingQty(' + j + ',0.1)">+.1</button>' +
+        '<button class="circle-btn" style="width:30px;height:30px;font-size:11px" onclick="ingQty(' + j + ',1)">+1</button></div></div>';
+    });
+    h += '<button class="deduct" onclick="doDeduct()">🍽 扣除「' + r.n + '」用料并出库</button>';
+    $('detailScroll').innerHTML = h;
+  }
+  function closeDetail(){ $('detail').classList.remove('on'); }
+  function ingQty(j, d){
+    var x = RECIPES[curDetail].ing[j];
+    x.b = Math.max(0, Math.round((x.b + d) * 10) / 10);
+    $('iv' + j).value = x.b;
+  }
+  function ingQtyIn(j, v){
+    var x = RECIPES[curDetail].ing[j];
+    var n = npm(v); if (n === null) n = 0;
+    x.b = Math.max(0, Math.round(n * 10) / 10);
+    $('iv' + j).value = x.b;
+  }
+  /* 演示级联动：扣除真实写入本地库存（真机由桥落库后 setData 回灌） */
+  function doDeduct(){
+    var r = RECIPES[curDetail];
+    var used = [];
+    r.ing.forEach(function(x){
+      if (x.b <= 0) return;
+      Object.keys(DATA).some(function(z){
+        var idx = DATA[z].findIndex(function(it){ return it.n === x.n; });
+        if (idx >= 0){
+          var it = DATA[z][idx];
+          it.q = Math.max(0, Math.round((it.q - x.b) * 10) / 10);
+          if (it.q <= 0){ DATA[z].splice(idx, 1); used.push(x.n + '×' + x.b + x.u + '(吃完)'); }
+          else used.push(x.n + '×' + x.b + x.u + ' → 剩 ' + it.q);
+          return true;
+        }
+        return false;
+      });
+    });
+    renderZone();
+    toast(used.length ? '已扣除：' + used.join(' · ') + ' ✓' : '库存中没有对应用料 🤔');
+    closeDetail();
+  }
+
+  var tt;
+  function toast(msg){
+    var t = $('toast'); t.textContent = msg; t.classList.add('show');
+    clearTimeout(tt); tt = setTimeout(function(){ t.classList.remove('show'); }, 2200);
+  }
+  /* ============ 桥适配层（Capacitor FridgeNative 优先 / AndroidBridge 兼容 / 浏览器静默） ============ */
+  (function(){
+    var F = null;
+    try { if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.FridgeNative) F = window.Capacitor.Plugins.FridgeNative; } catch(e){}
+    window.bridgeMode = F ? 'capacitor' : (window.AndroidBridge ? 'android' : 'demo');
+    window.emit = function(type, payload){
+      var json = JSON.stringify(payload || {});
+      if (F){ try { F.receiveEvent({type: type, payload: json}); } catch(e){} return; }
+      if (window.AndroidBridge){ try { window.AndroidBridge.onEvent(type, json); } catch(e){} }
+    };
+    window.setData = function(json){
+      try {
+        var d = JSON.parse(json);
+        if (d.inv) DATA = invToDemo(d.inv);
+        if (d.iconSet) iconSet = d.iconSet;
+        renderZone();
+      } catch(e){}
+    };
+    function invToDemo(items){
+      var out = {chill: [], freeze: [], ambient: []};
+      (items || []).forEach(function(it){
+        out[it.zone || 'chill'].push({
+          n: it.name, q: it.qty, u: it.unit,
+          tag: it.tag || '蔬菜', k: it.catKey || 'veg',
+          w: parseInt(it.fresh && it.fresh.w) || 100,
+          c: (it.fresh && it.fresh.c) || '#5FA45C',
+          note: (it.fresh && it.fresh.note) || '很新鲜'
+        });
+      });
+      return out;
+    }
+    window.setInsets = function(top, bottom){ /* 手机壳演示无感；真机壳按安全区预留 */ };
+    window.setAppTheme = function(dark){
+      document.body.dataset.theme = dark ? 'dark' : 'light';
+      var sw = document.querySelector('#p-set .swt input'); if (sw) sw.checked = !!dark;
+    };
+    window.setAppMode = function(){ /* 演示壳无需去壳 */ };
+    window.handleBack = function(){
+      if (window.closeEdit && document.getElementById('ovEdit').classList.contains('show')){ closeEdit(); return true; }
+      return false;
+    };
+    if (F){
+      try {
+        F.addListener('fridgeData', function(res){ window.setData(res.json); });
+        F.addListener('fridgeInsets', function(res){ window.setInsets(res.top, res.bottom); });
+        F.addListener('fridgeTheme', function(res){ window.setAppTheme(res.dark); });
+        F.ready(); /* 通知原生：页面已就绪，可推送数据/安全区 */
+      } catch(e){}
+    }
+  })();
+
+  console.log('XIAOCHU cap 1.0');
+
+  renderZone(); renderRecipes(); banner(); renderFilter();
+</script>
+</body>
+</html>
