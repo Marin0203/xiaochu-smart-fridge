@@ -359,8 +359,19 @@
               </div></div>
             <div class="set-card"><div class="set-ic">☁️</div><div><div class="set-n">数据同步</div><div class="set-s">上次同步 刚刚</div></div>
               <div class="right" style="display:flex;align-items:center;gap:10px"><span class="dotg"></span><button class="pill-btn" onclick="syncNow(this)">立即同步</button></div></div>
-            <div class="set-card"><div class="set-ic">🚀</div><div><div class="set-n">UI 更新</div><div class="set-s">软件 1.1 · 界面 <b id="appVerLine" style="color:var(--ink)">同步中…</b></div></div>
-              <div class="right" style="display:flex;align-items:center;gap:8px"><span id="uiVerState" style="font-size:12px;color:var(--ink2)"></span><button class="pill-btn" id="uiRestartBtn" style="display:none" data-act="upd" onclick="window.uiUpdateTap && window.uiUpdateTap(this)">更新</button></div></div>
+            <div class="set-card" style="flex-direction:column; align-items:stretch; gap:10px; cursor:default">
+              <div style="display:flex; align-items:center; gap:11px; min-width:0">
+                <div class="set-ic">🚀</div>
+                <div style="min-width:0; flex:1">
+                  <div class="set-n">UI 更新</div>
+                  <div class="set-s" style="white-space:normal; overflow:visible">本机版本 <b id="appVerLine" style="color:var(--ink)">同步中…</b>　·　可更新至 <b id="appTargetLine" style="color:var(--corn)">—</b></div>
+                </div>
+              </div>
+              <div style="display:flex; align-items:center; justify-content:space-between; padding:0 2px">
+                <span id="uiVerState" style="font-size:12px; color:var(--ink2)"></span>
+                <button class="pill-btn" id="uiRestartBtn" style="display:none; padding:7px 18px" data-act="upd" onclick="window.uiUpdateTap && window.uiUpdateTap(this)">更新</button>
+              </div>
+            </div>
             <div class="set-card"><div class="set-ic">🩺</div><div><div class="set-n">系统体检</div><div class="set-s">检查云 / 登录 / 桥回路 / AI</div></div>
               <div class="right"><button class="pill-btn" id="hcBtn" data-act="hc" onclick="window.healthTap && window.healthTap(this)">一键体检</button></div></div>
           </div>
@@ -1052,11 +1063,16 @@
       try {
         var state = document.getElementById('uiVerState');
         var btn = document.getElementById('uiRestartBtn');
-        var verLine = document.getElementById('appVerLine');
-        if (verLine && d && d.ver) verLine.textContent = 'v' + d.ver;
-        if (!d || !d.ver) return;
-        state.textContent = d.state === 'new' ? '有新版本！' : '✅ 已是最新（云同步）';
-        if (btn) btn.style.display = d.state === 'new' ? '' : 'none';
+        var cur = document.getElementById('appVerLine');
+        var tgt = document.getElementById('appTargetLine');
+        if (!d) return;
+        /* 契约 v2: {cur,target,state}; 兼容旧 {ver,state}: ok=本机版本 new=可更新版本 */
+        var curV = d.cur || (d.state === 'ok' ? d.ver : null);
+        var tgtV = d.target || (d.state === 'new' ? d.ver : null);
+        if (cur && curV) cur.textContent = 'v' + curV;
+        if (tgt) tgt.textContent = tgtV ? 'v' + tgtV : '—';
+        if (state) state.textContent = d.state === 'new' ? '有新版本！' : '✅ 已是最新（云同步）';
+        if (btn) btn.style.display = (d.state === 'new' && tgtV) ? '' : 'none';
       } catch(e){}
     };
     window.bridgeMode = F ? 'capacitor' : (window.AndroidBridge ? 'android' : 'demo');

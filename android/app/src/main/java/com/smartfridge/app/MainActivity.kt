@@ -81,9 +81,10 @@ class MainActivity : BridgeActivity(), FridgeNative.Host {
                     lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
                         val v = UiUpdater.checkForUpdate(this@MainActivity, services)
                         if (v != null) {
+                            val cur = loadedWebVersion()
                             runOnUiThread {
                                 webView()?.evaluateJavascript(
-                                    "window.setUiUpdate && window.setUiUpdate({\"ver\":\"$v\",\"state\":\"new\"})", null,
+                                    "window.setUiUpdate && window.setUiUpdate({\"cur\":\"$cur\",\"target\":\"$v\",\"state\":\"new\",\"ver\":\"$v\"})", null,
                                 )
                             }
                         }
@@ -120,6 +121,15 @@ class MainActivity : BridgeActivity(), FridgeNative.Host {
 
     /** Capacitor WebView（父 Bridge 提供；页面 ready 后可用） */
     private fun webView(): WebView? = getBridge()?.webView
+
+    /** 当前生效的页面版本（files/web/version.json 的 ver；无 = 出厂种子未热更） */
+    private fun loadedWebVersion(): String = try {
+        val jf = java.io.File(filesDir, "web/version.json")
+        if (jf.exists()) {
+            val o = kotlinx.serialization.json.Json.parseToJsonElement(jf.readText()).jsonObject
+            o["ver"]?.jsonPrimitive?.contentOrNull ?: ""
+        } else ""
+    } catch (_: Exception) { "" }
 
     /** FridgeNative: 页面就绪 → 建桥 + 推安全区/主题/数据（插件线程 → 必须切主线程操作 WebView）
      *  Cap WebView 在 ready 瞬间可能尚未挂载：延迟重试至多 10 次（250ms/次）*/
@@ -222,17 +232,13 @@ class MainActivity : BridgeActivity(), FridgeNative.Host {
                 val ui = getSharedPreferences("ui", MODE_PRIVATE)
                 // 以 files/web/version.json 为真相：已生效=ok，未生效=pending=new
                 val pending = ui.getString("ui_ver", "") ?: ""
-                val loaded = try {
-                    val jf = java.io.File(filesDir, "web/version.json")
-                    if (jf.exists()) {
-                        val o = kotlinx.serialization.json.Json.parseToJsonElement(jf.readText()).jsonObject
-                        o["ver"]?.jsonPrimitive?.contentOrNull ?: ""
-                    } else ""
-                } catch (_: Exception) { "" }
+                val loaded = loadedWebVersion()
                 val st = if (pending.isNotEmpty() && pending != loaded) "new" else "ok"
                 if (loaded.isNotEmpty()) {
+                    // 契约 v2: cur=本机版本 target=可更新版本（ver 保留兼容旧页=本机版本）
+                    val target = if (st == "new") pending else ""
                     wv.evaluateJavascript(
-                        "window.setUiUpdate && window.setUiUpdate({\"ver\":\"$loaded\",\"state\":\"$st\"})", null,
+                        "window.setUiUpdate && window.setUiUpdate({\"cur\":\"$loaded\",\"target\":\"$target\",\"state\":\"$st\",\"ver\":\"$loaded\"})", null,
                     )
                 }
                 getSharedPreferences("ui", MODE_PRIVATE).edit().putInt("page_fail", 0).apply()
