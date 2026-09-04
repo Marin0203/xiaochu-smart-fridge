@@ -191,6 +191,27 @@ class SyncService(
         pushQuietly()
     }
 
+    /** 保质期 v2 一次性迁移(2026-09-04): 现存食材按新版保鲜表抬高 shelfLifeDays(只升不降, 不缩短);
+     *  AI 识别的商品保质期用于新录入, 存量以保鲜表为准 */
+    suspend fun upgradeShelfV2() {
+        if (db.getMeta("shelf_v2_done") == "1") return
+        val updated = mutableListOf<Pair<Ingredient, Int>>()
+        for (i in items.value) {
+            val t = FreshnessTable.daysFor(i.name, i.zone.db) ?: continue
+            if (t > i.shelfLifeDays) updated.add(i to t)
+        }
+        if (updated.isNotEmpty()) {
+            for ((i, days) in updated) {
+                val n = i.copyWith(shelfLifeDays = days, updatedAt = Instant.now())
+                db.upsertIngredient(n)
+                db.enqueueOutbox(i.id, "upsert", n.toJsonObject().toString())
+            }
+            emit()
+            pushQuietly()
+        }
+        db.setMeta("shelf_v2_done", "1")
+    }
+
     /** 重新编辑食材 (名称/数量/单位/分区/类别), 全家实时同步 */
     suspend fun updateIngredient(
         id: String,

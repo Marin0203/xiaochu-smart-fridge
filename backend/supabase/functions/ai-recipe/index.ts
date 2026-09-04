@@ -58,6 +58,7 @@ type Item = { name: string; quantity: number; unit: string; freshness_percent: n
 function buildRecipeUser(
   expiring: Item[],
   context: Item[],
+  avoid: string[] = [],
 ): string {
   let s = "【必须优先消耗的临期食材】\n";
   for (const e of expiring) {
@@ -66,6 +67,9 @@ function buildRecipeUser(
   if (context.length > 0) {
     s += "\n【其他当前库存(可选用)】\n";
     for (const c of context) s += `- ${c.name} x${c.quantity}${c.unit}\n`;
+  }
+  if (avoid.length > 0) {
+    s += `\n【上次已做过的菜（请尽量避免完全相同，变化做法/配菜也可以）】\n${avoid.map((a) => `- ${a}`).join("\n")}\n`;
   }
   return s;
 }
@@ -89,7 +93,7 @@ async function chat(system: string, user: string): Promise<string> {
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
       model,
-      temperature: 0.1,
+      temperature: 0.7,
       max_tokens: 3000,
       response_format: { type: "json_object" },
       messages: [
@@ -227,7 +231,7 @@ Deno.serve(async (req) => {
     const system = mode === "normal" ? SYSTEM_RECIPE_NORMAL : SYSTEM_RECIPE_EXPIRING;
     const user = mode === "normal"
       ? buildNormalRecipeUser(context.length > 0 ? context : expiring, avoid)
-      : buildRecipeUser(expiring, context);
+      : buildRecipeUser(expiring, context, avoid);
     const content = await chat(system, user);
     const plan = sanitizeRecipePlan(content);
     if (plan.recipes && plan.recipes.length > 0) return json({ ok: true, recipes: plan.recipes });

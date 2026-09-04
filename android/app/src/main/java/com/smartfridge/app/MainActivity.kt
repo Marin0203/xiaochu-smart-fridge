@@ -99,6 +99,8 @@ class MainActivity : BridgeActivity(), FridgeNative.Host {
                         bridge?.pushAll()
                     }
                     bridge?.pushAll()
+                    // 保质期 v2 迁移(一次性): 存量食材按新版保鲜表抬高 shelfLifeDays
+                    lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) { services.sync.upgradeShelfV2() }
                 }
             }
         }

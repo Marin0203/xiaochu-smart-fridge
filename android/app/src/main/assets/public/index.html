@@ -401,8 +401,8 @@
     <!-- 编辑浮窗 -->
     <div class="overlay" id="ovEdit" onclick="if(event.target===this)closeEdit()">
       <div class="modal">
-        <div class="m-head"><div class="m-title">编辑 · <span id="eName"></span>
-          <button class="circle-btn" style="width:26px;height:26px;font-size:12px;vertical-align:middle" onclick="refreshFresh()" title="刷新保质期（今天算新买）">⟳</button>
+        <div class="m-head"><div class="m-title" style="display:flex;align-items:center;gap:8px;flex:1;min-width:0"><span style="white-space:nowrap">编辑 · <span id="eName"></span></span>
+          <button class="circle-btn" style="width:26px;height:26px;font-size:12px;flex:none" onclick="refreshFresh()" title="刷新保质期（今天算新买）">⟳</button>
         </div><button class="m-close" onclick="closeEdit()">✕</button></div>
         <span class="zbadge" id="eTag" style="margin:0 0 4px"></span>
         <div class="m-label">分区</div>
@@ -415,8 +415,8 @@
           <button class="circle-btn" style="width:34px;height:34px;font-size:11px" onclick="eQtyStep(0.1)">+.1</button>
           <button class="circle-btn" style="width:34px;height:34px;font-size:12px" onclick="eQtyStep(1)">+1</button>
         </div>
-        <div class="m-label">单位</div>
-        <div class="chips" id="eUnit"></div>
+        <div class="m-label">单位 · 自由填写</div>
+        <input class="num" id="eUnitV" value="" inputmode="text" style="width:150px" placeholder="如：个 / 盒 / 袋 / 克 / 瓶" oninput="eUnitIn(this.value)">
         <div class="m-actions">
           <button class="m-danger" onclick="doDelete()">删除</button>
           <button class="m-primary" onclick="eQtyDone()">完成</button>
@@ -571,16 +571,16 @@
       (it.days != null ? '<span style="color:var(--ink2)">· 剩 ' + it.days + ' 天</span>' : '') + '</div>' +
       '<div class="fresh" style="--c:' + it.c + ';--w:' + it.w + '%"><i></i></div></div>';
   }
-  var sortMode = 'def';   /* 库存排序: def 默认 / asc 保质期短→长 / desc 长→短 */
+  var sortMode = 'def';   /* 库存排序: def 默认 / asc 新鲜度低→高(先吃临期) / desc 高→低 */
   function cycleSort(){
     sortMode = sortMode === 'def' ? 'asc' : (sortMode === 'asc' ? 'desc' : 'def');
-    toast(sortMode === 'asc' ? '按保质期 ↑ 先吃最近的 🌿' : (sortMode === 'desc' ? '按保质期 ↓ 后吃临期的' : '已恢复默认顺序'));
+    toast(sortMode === 'asc' ? '按新鲜度 ↑ 先吃不新鲜的 🌿' : (sortMode === 'desc' ? '按新鲜度 ↓ 后吃不新鲜的' : '已恢复默认顺序'));
     renderZone();
   }
   function renderZone(){
     var list = visible();
     if (sortMode !== 'def'){
-      var key = function(x){ return x.it.days == null ? 99999 : x.it.days; };
+      var key = function(x){ return x.it.w == null ? 99999 : x.it.w; };  /* 按新鲜度进度条(百分比)排序 */
       list = list.slice().sort(function(a, b){
         var d = key(a) - key(b);
         return sortMode === 'asc' ? d : -d;
@@ -615,7 +615,6 @@
   function dismissBanner(){
     localStorage.setItem('xcRemind', JSON.stringify({date: new Date().toDateString(), closed: true}));
     var b = $('banner'); if (b) b.remove();
-    toast('今日不再提醒 · 明天再看 🌿');
   }
   function setZone(el){
     curZone = el.dataset.z;
@@ -651,7 +650,6 @@
     setTimeout(function(){
       btn.classList.remove('spin');
       renderRecipes();
-      toast('已刷新 ' + RECIPES.length + ' 道菜谱 ✨');
     }, 900);
   }
 
@@ -676,9 +674,13 @@
     $('hdT').textContent = p === 'inv' ? '库存' : p === 'recipe' ? '菜谱' : '设置';
     var idx = p === 'inv' ? 0 : p === 'recipe' ? 1 : 2;
     $('navInd').style.left = 'calc(' + (idx * 100 / 3) + '% + 8px)';
+    /* 灯芯随按钮实际宽度对齐（修复“设置”页灯芯变形） */
+    var nb = document.querySelectorAll('#nav button')[idx];
+    if (nb){ var ind = $('navInd'); ind.style.width = nb.offsetWidth + 'px'; ind.style.left = nb.offsetLeft + 'px'; }
     document.querySelectorAll('#nav button').forEach(function(b, j){ b.classList.toggle('on', j === idx); });
     $('fw').style.display = p === 'inv' ? '' : 'none';
     $('btnSync').style.display = p === 'inv' ? '' : 'none';
+    $('btnSort').style.display = p === 'inv' ? '' : 'none';
     $('btnRefresh').style.display = p === 'recipe' ? '' : 'none';
     $('fabAdd').classList.toggle('hide', p !== 'inv');
   }
@@ -755,9 +757,10 @@
     buildChips('eZone', ['冷藏','冷冻','常温'], ZONES[eZ], function(v){
       eZ = Object.keys(ZONES).filter(function(k){ return ZONES[k] === v; })[0];
     });
-    buildChips('eUnit', ['个','盒','袋','克','瓶','颗','块'], eU, function(v){ eU = v; });
+    $('eUnitV').value = eU;
     $('ovEdit').classList.add('show');
   }
+  function eUnitIn(v){ eU = (v || '').trim(); }
   /* 编辑浮窗：事件委托一次性绑定，点击即响应（无时间窗防抖——防抖窗曾导致"第一次点击被吞"） */
   var editOpenAt = 0;
   function buildChips(boxId, list, cur, pick){

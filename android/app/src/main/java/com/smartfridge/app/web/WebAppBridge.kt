@@ -417,8 +417,8 @@ class WebAppBridge(
         })
     }
 
-    /** 关东煮=普通菜，只提高出现概率(80%)：AI 结果返回后才插入(不再占位"看门")；位置随机 1..n+1 */
-    private val ODEN_CHANCE = 80
+    /** 关东煮=普通菜，只是出现概率更高(60%)：AI 结果返回后才插入(不再占位"看门")；位置随机 1..n+1 */
+    private val ODEN_CHANCE = 60
 
     /** 把关东煮插入菜谱（概率 ODEN_CHANCE%；AI 未回/空结果时不插入，交给页面加载态） */
     private fun withOden(recipesObj: kotlinx.serialization.json.JsonObject): kotlinx.serialization.json.JsonObject {
