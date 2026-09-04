@@ -62,6 +62,8 @@ class WebAppBridge(
 
     // 菜谱缓存: 首次/同步成功后生成, setData 回灌
     @Volatile private var recipesPlan: RecipePlan? = null
+    // 烘焙好的菜谱 JSON (含关东煮插位/徽章): 计划生成时定死一次, 回灌只重放 —— 防止每推重掷导致页面反复闪动
+    @Volatile private var recipesJson: kotlinx.serialization.json.JsonObject? = null
 
     // 菜谱生成模式: 页面「临期优先」开关切换(事件 recipe-mode); 持久化, 下次启动沿用
     @Volatile private var recipeMode: com.smartfridge.app.domain.RecipeMode = run {
@@ -361,9 +363,7 @@ class WebAppBridge(
         val root = buildJsonObject {
             put("inv", WebData.invArray(items) { uuidToId[it] ?: 0 })
             put("iconSet", WebData.iconSetId())
-            put("recipes", withOden(
-                recipesPlan?.let { badgeRecipes(it) } ?: kotlinx.serialization.json.buildJsonObject { }
-            ))
+            put("recipes", recipesJson ?: kotlinx.serialization.json.buildJsonObject { })
         }
         val json = root.toString()
         Trace.log(context, "pushInvNow json len=${json.length} items=${items.size}")
@@ -398,6 +398,7 @@ class WebAppBridge(
                 localFallbackRecipes(emptyList())
             }
             recipesPlan = plan
+            recipesJson = withOden(badgeRecipes(plan))   /* 一次性烘焙(关东煮插位+徽章定死) */
             main.launch { pushInvNow() }
         }
     }
