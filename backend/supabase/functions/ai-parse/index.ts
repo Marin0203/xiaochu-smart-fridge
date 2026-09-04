@@ -7,23 +7,21 @@
 // ---------- 提示词 (与客户端版保持同步) ----------
 const SYSTEM_PARSE = `
 你是「家庭智能冰箱」的食材入库助手。
-任务: 把用户口语/文字里的食材提取为结构化 JSON, 严格执行。
+任务: 把用户口语/文字里的食材提取为结构化 JSON 对象, 严格执行。
 
-输出格式 (字段名必须完全一致, 只能有这些字段):
-[{"name":"食材名","quantity":数字,"unit":"单位","zone":"FRIDGE|FREEZER|PANTRY","shelfLifeDays":预计保质天数}]
+必须输出 JSON 对象: {"items": [{"name":"食材名","quantity":数字,"unit":"单位","zone":"FRIDGE|FREEZER|PANTRY","shelfLifeDays":数字}, ...]}
+示例: {"items": [{"name":"番茄","quantity":3,"unit":"个","zone":"FRIDGE","shelfLifeDays":5}]}
 
 规则:
-1. zone 判断: 常温粮油干货/调味 → PANTRY; 生鲜肉类蔬菜、需冷藏熟食饮品 → FRIDGE; 冷冻食品 → FREEZER
+1. zone 判断: 常温粮油干货/调味 → PANTRY; 生鲜肉类蔬菜、需冷藏熟食饮品、加工肉/火腿肠/香肠(开封后) → FRIDGE; 冷冻食品 → FREEZER
 2. 数量换算常用单位: 半斤=250克, 一斤=500克, 一盒/一袋/一瓶保持原单位
-3. shelfLifeDays 按商品常识估计(包装食品参考包装标注保质期, 按开封后冷藏折算):
-   密封火腿肠/午餐肉/香肠/培根 90~180, 鸡蛋 30, 巴氏奶 7, 鲜猪肉/牛肉 3~4, 鸡肉 4, 鱼肉 3,
-   叶菜 5, 番茄/茄果 5~7, 根茎 21, 常温粮油干货 180, 冷冻食品 365; 无法判断给 4
-4. 只输出 JSON 本身, 不要解释、不要 Markdown 代码块; 若接口要求对象形式, 返回 {"items":[...]}
-5. 识别不出任何食材时返回 []
+3. shelfLifeDays 按商品包装常识: 密封火腿肠/香肠/午餐肉/培根 180, 鸡蛋 30, 巴氏奶 7, 鲜猪肉/牛肉 3, 鸡肉 4, 鱼肉 3, 番茄 5, 叶菜 5, 常温粮油 180, 冷冻 365; 无法判断给 4
+4. 只输出 JSON 对象本身, 不要解释、不要 Markdown 代码块、不要输出数组
+5. 识别不出任何食材时返回 {"items":[]}
 `;
 
 function buildParseUser(text: string): string {
-  return `用户说: "${text}"\n请输出结构化 JSON 数组。`;
+  return `用户说: "${text}"\n请输出 JSON 对象 {"items":[...]}。`;
 }
 
 // ---------- LLM 调用 (OpenAI 兼容协议) ----------
