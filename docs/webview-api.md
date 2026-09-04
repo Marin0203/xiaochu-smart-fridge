@@ -1,5 +1,8 @@
 # WebView 数据桥协议 v0.1（WebUI 对接文件的对齐基准）
 
+> ⚠️ **已废弃（2026-09-04）**：本文是 Compose 时代旧契约（`window.FridgeBridge` 同步方法 + `__FRIDGE_EVENT__`），与现行事件桥 **完全不符**。
+> 现行契约唯一权威 = **`docs/bridge-contract.md`**。本文仅作历史存档，勿参考、勿按此对接。
+
 > WebUI 方案: Android WebView 加载 assets/webapp/ 下的 HTML（UI 线产出, 去壳三页版），
 > 通过本桥与原生数据层(AppServices)双向通信。**数据层不变, 只有 UI 层换为 HTML。**
 > 接驳约定: HTML 以 `window.FridgeBridge` 为桥对象（Android 侧注入名）。

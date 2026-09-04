@@ -1,5 +1,9 @@
 # 架构文档
 
+> ⚠️ **历史参考（2026-09-04）**：本文为 Compose 原生版时代（08-25~08-27）的分层说明。
+> 当前架构 = **Capacitor 6 宿主 + 单 HTML UI + 数据桥**（页面单一源 `D:\work2\小厨-WebView\小厨-重构版.html`）；
+> 分层与数据层职责仍有效（SyncService/SQLite/LWW 未变），客户端呈现层以 `docs/bridge-contract.md` + `docs/版本链.md` 为准。
+
 ## 1. 分层与职责
 
 ```

@@ -1,7 +1,9 @@
 # 小厨 · 家庭共享智能冰箱 & AI 食谱
 
-> **Android 原生版（Kotlin + Jetpack Compose，当前主方向）** + Supabase 全家桶：
-> 多端库存实时同步 / 保质期动态预警 / AI 语音一键入库 / 临期食材菜谱推荐
+> **当前架构：Capacitor 6 宿主（Kotlin，数据层原生）+ 单 HTML UI（唯一源 `D:\work2\小厨-WebView\小厨-重构版.html`）+ Supabase 全家桶**
+> 页面↔桥契约：`docs/bridge-contract.md`（唯一权威）｜ 页面内容版本链：`docs/版本链.md` ｜ 版本号：`VERSIONS.json`（唯一事实源）
+> 功能：多端库存实时同步 / 保质期动态预警（权威表 835 条）/ AI 文字一键入库 / 临期食材 AI 菜谱（30 道池）
+> （历史：08-25~08-27 曾为 Jetpack Compose 原生版主线，08-29 起转为 WebView 单 HTML；Flutter `app/` 仅为参考实现。）
 
 ```
 ┌────────────────────────── 客户端 (Kotlin + Jetpack Compose, MVVM) ──────────────────┐
