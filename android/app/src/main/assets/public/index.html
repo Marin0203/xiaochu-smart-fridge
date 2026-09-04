@@ -356,20 +356,11 @@
               <div class="right"><button class="pill-btn" id="hcBtn" data-act="hc" onclick="window.healthTap && window.healthTap(this)">一键体检</button></div></div>
             <div class="set-card"><div class="set-ic">☁️</div><div><div class="set-n">数据同步</div><div class="set-s">上次同步 刚刚</div></div>
               <div class="right" style="display:flex;align-items:center;gap:10px"><span class="dotg"></span><button class="pill-btn" onclick="syncNow(this)">立即同步</button></div></div>
-            <div class="set-card" style="flex-direction:column; align-items:stretch; gap:10px; cursor:default">
-              <div style="display:flex; align-items:center; gap:11px; min-width:0">
-                <div class="set-ic">🚀</div>
-                <div style="min-width:0; flex:1">
-                  <div class="set-n">UI 更新</div>
-                  <div class="set-s" style="white-space:normal; overflow:visible" id="uiUpdateLine">检查中…</div>
-                </div>
-              </div>
-              <div style="display:flex; align-items:center; justify-content:space-between; padding:0 2px">
-                <span id="uiVerState" style="font-size:11.5px; color:var(--ink2)"></span>
-                <div style="display:flex; align-items:center; gap:8px">
-                  <button class="pill-btn" id="uiCheckBtn" style="padding:7px 14px; background:var(--glass-strong); color:var(--ink); box-shadow:none; border:1px solid var(--glass-border)" onclick="window.checkUpdate && window.checkUpdate(this)">⟳ 检查更新</button>
-                  <button class="pill-btn" id="uiRestartBtn" style="display:none; padding:7px 18px" data-act="upd" onclick="window.uiUpdateTap && window.uiUpdateTap(this)">更新</button>
-                </div>
+            <div class="set-card" style="cursor:default">
+              <div class="set-ic">🚀</div><div style="min-width:0; flex:1"><div class="set-n">UI 更新</div>
+                <div class="set-s" id="uiUpdateLine">检查中…</div></div>
+              <div class="right">
+                <button class="pill-btn" id="uiCheckBtn" data-act="upd" style="padding:7px 18px;font-size:12.5px;white-space:nowrap" onclick="window.uiUpdateTap && window.uiUpdateTap(this)">检查更新</button>
               </div>
             </div>
             <div class="set-card" style="cursor:default">
@@ -1110,14 +1101,12 @@
           ' · UI 版本 ' + (window.__uiState.cur ? 'v' + window.__uiState.cur : '…');
       }
       var line = document.getElementById('uiUpdateLine');
-      var st = document.getElementById('uiVerState');
-      var btn = document.getElementById('uiRestartBtn');
+      var btn = document.getElementById('uiCheckBtn');
       var isNew = window.__uiState.state === 'new' && !!window.__uiState.target;
       if (line){
         line.innerHTML = isNew ? '可更新至 <b style="color:var(--corn)">v' + window.__uiState.target + '</b>' : '已是最新版本';
       }
-      if (st) st.textContent = isNew ? '新版本已发布' : '';
-      if (btn){ btn.style.display = isNew ? '' : 'none'; btn.textContent = '更新'; btn.disabled = false; }
+      if (btn){ btn.textContent = isNew ? '更新' : '检查更新'; btn.disabled = false; }
     };
     window.setAppInfo = function(ver, code){
       window.__appInfo = {ver: String(ver), code: String(code)};
@@ -1131,17 +1120,13 @@
       window.__uiState.state = d.state;
       window.__renderVerCards();
     };
+    /* 一钮两用: 无新版=检查更新; 有新版=点击直接更新 */
     window.uiUpdateTap = function(btn){
-      btn.textContent = '正在更新…';
+      if (btn.textContent === '正在更新…' || btn.textContent === '检查中…') return;
+      var isNew = window.__uiState.state === 'new' && !!window.__uiState.target;
+      btn.textContent = isNew ? '正在更新…' : '检查中…';
       btn.disabled = true;
-      window.emit('ui-update', {});
-    };
-    /* 手动检查更新: 原生核对服务器 → 有新版本则自动拉取并刷新; 无则提示已最新 */
-    window.checkUpdate = function(btn){
-      btn.textContent = '检查中…';
-      btn.disabled = true;
-      window.emit('check-update', {});
-      setTimeout(function(){ try { if (btn){ btn.textContent = '⟳ 检查更新'; btn.disabled = false; } } catch(e){} }, 5000);
+      window.emit(isNew ? 'ui-update' : 'check-update', {});
     };
     window.healthTap = function(btn){
       window.emit('trace', {msg: 'healthBtn tapped'});

@@ -219,6 +219,33 @@ class SyncService(
         db.setMeta("shelf_v2_done", "1")
     }
 
+    /** 保质期 v3 校准迁移(2026-09-05): 存量按校准后的保鲜表"覆盖"已知食材的 shelfLifeDays(可升可降,
+     *  修正 白菜4→14/小葱60→7 之类离谱值); 未收录名称保持原值 */
+    suspend fun upgradeShelfV3() {
+        if (db.getMeta("shelf_v3_done_1") == "1") return
+        val items = items.value
+        if (items.isEmpty()) {
+            android.util.Log.i("XC_TRACE", "shelf-v3: items 未加载, 下次重试")
+            return
+        }
+        val updated = mutableListOf<Pair<Ingredient, Int>>()
+        for (i in items) {
+            val t = FreshnessTable.daysFor(i.name, i.zone.db) ?: continue
+            if (t != i.shelfLifeDays) updated.add(i to t)
+        }
+        android.util.Log.i("XC_TRACE", "shelf-v3: updated=${updated.size} (${updated.take(10).joinToString { "${it.first.name}:${it.first.shelfLifeDays}->${it.second}" }})")
+        if (updated.isNotEmpty()) {
+            for ((i, days) in updated) {
+                val n = i.copyWith(shelfLifeDays = days, updatedAt = Instant.now())
+                db.upsertIngredient(n)
+                db.enqueueOutbox(i.id, "upsert", n.toJsonObject().toString())
+            }
+            emit()
+            pushQuietly()
+        }
+        db.setMeta("shelf_v3_done_1", "1")
+    }
+
     /** 重新编辑食材 (名称/数量/单位/分区/类别), 全家实时同步 */
     suspend fun updateIngredient(
         id: String,
