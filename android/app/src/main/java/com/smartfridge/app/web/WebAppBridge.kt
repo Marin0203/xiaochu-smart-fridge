@@ -184,7 +184,7 @@ class WebAppBridge(
         services.sync.refreshFreshness(uuid)
         pushInv()
     }
-    /** 临期优先开关: 记录模式 → 持久化 → 清空食谱池并按新模式强制重生成(池是模式定制的! 否则切换被池吞) */
+    /** 临期优先开关(2026-09-05 新规): 只筛选展示 —— 不作废池、不重生成; 直接按当前模式从池里切一批(临期菜带标靠前) */
     private fun handleRecipeMode(p: JsonObject) {
         val mode = if (p["mode"]?.jsonPrimitive?.contentOrNull == "expiring")
             com.smartfridge.app.domain.RecipeMode.EXPIRING
@@ -192,9 +192,8 @@ class WebAppBridge(
         recipeMode = mode
         context.getSharedPreferences("settings", android.content.Context.MODE_PRIVATE).edit()
             .putString("recipe_mode", mode.db).apply()
-        Trace.log(context, "recipe-mode: ${mode.db} (invalidate pool=${recipePool.size})")
-        recipePool = emptyList()   // 关键: 池是旧模式生成的, 必须作废
-        refreshRecipesIfNeeded(force = true)
+        Trace.log(context, "recipe-mode: ${mode.db} (pool kept=${recipePool.size})")
+        refreshRecipesIfNeeded(force = true)   /* 池在 → 立即筛选一批; 池不在 → 生成(带至多10道临期约束) */
     }
 
     /** 手动检查更新(设置页「检查更新」按钮): 查服务器 → 有新版本自动拉取并刷新; 无则提示已最新 */
@@ -422,9 +421,10 @@ class WebAppBridge(
             val plan = try {
                 val items = services.sync.items.value
                 val all = items.map { ExpiringItem.fromIngredient(it) }
-                val wantExpiring = recipeMode == com.smartfridge.app.domain.RecipeMode.EXPIRING
-                val expiring = if (wantExpiring) items.filter { it.freshnessStatus().isAlert }.map { ExpiringItem.fromIngredient(it) } else emptyList()
-                val mode = if (wantExpiring && expiring.isNotEmpty()) com.smartfridge.app.domain.RecipeMode.EXPIRING else com.smartfridge.app.domain.RecipeMode.NORMAL
+                // 生成时检测临期: 始终把黄/红食材作为"临期列表"传给服务端(其按 至多10道临期约束 生成)
+                val expiring = items.filter { it.freshnessStatus().isAlert }.map { ExpiringItem.fromIngredient(it) }
+                // 池生成固定 NORMAL 请求(约30道): 开关只影响"筛选展示", 不改变生成
+                val mode = com.smartfridge.app.domain.RecipeMode.NORMAL
                 val p = services.ai.recommendRecipes(
                     expiring, all.take(20), mode,
                     avoid = releasedTitles.takeLast(20),   /* 避重: 已发放过的菜 */
@@ -527,7 +527,12 @@ class WebAppBridge(
         if ((0 until 100).random() >= ODEN_CHANCE) return recipesObj
         val out = kotlinx.serialization.json.buildJsonObject {
             val keys = recipesObj.keys.toList().take(4)   // AI 只拿 4 道, 关东煮占第 5 席
-            val pos = (0..keys.size).random()
+            // 带标(1)菜必须在最前; 关东煮在"其余剩余位置"随机(不带标时全随机)
+            val badged = keys.count { k ->
+                ((recipesObj[k] as? kotlinx.serialization.json.JsonObject)?.get("badge")
+                    ?.jsonPrimitive?.contentOrNull ?: "0") == "1"
+            }
+            val pos = badged + (0..keys.size - badged).random()
             var idx = 0
             for (k in keys) {
                 if (idx == pos) { put((idx + 1).toString(), ODEN); idx++ }
