@@ -1,6 +1,6 @@
 {
-    "appVersion":  "1.1.23",
-    "versionCode":  27,
+    "appVersion":  "1.1.24",
+    "versionCode":  28,
     "appName":  "小厨",
     "scheme":  "APK=semver 三段式(versionName)+单调递增 versionCode; UI 页面版本=服务端 ui_releases 序列(1.0.x, 与 appVersion 解耦, 由 ui-publish 函数维护)",
     "rules":  [

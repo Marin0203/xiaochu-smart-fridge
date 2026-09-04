@@ -211,23 +211,23 @@ class WebAppBridge(
             UiUpdater.downloadNow(
                 context, services,
                 onDone = { ver -> main.launch {
-                    eval("window.toast && window.toast(" + jsSafe("已更新至 v$ver，正在刷新…") + ")")
+                    eval("window.toast && window.toast(" + jsStr("已更新至 v$ver，正在刷新…") + ")")
                     eval("setTimeout(function(){ location.reload(); }, 1200)")   /* 先看主题弹窗, 再刷新 */
                 } },
-                onFail = { msg -> main.launch { eval("window.toast && window.toast(" + jsSafe(msg) + ")") } },
+                onFail = { msg -> main.launch { eval("window.toast && window.toast(" + jsStr(msg) + ")") } },
             )
         } else {
             Trace.log(context, "check-update: up to date ($cur)")
             eval("window.setUiUpdate && window.setUiUpdate({\"cur\":\"$cur\",\"target\":\"\",\"state\":\"ok\"})")
-            main.launch { eval("window.toast && window.toast(" + jsSafe("已是最新版本") + ")") }
+            main.launch { eval("window.toast && window.toast(" + jsStr("已是最新版本") + ")") }
         }
     }
 
     /** 长按刷新按钮: 主动重新生成池(更新完提示, 下一次短按即用新池) */
     private suspend fun handleRefreshPool() {
-        main.launch { eval("window.toast && window.toast(" + jsSafe("正在更新菜谱池…") + ")") }
+        main.launch { eval("window.toast && window.toast(" + jsStr("正在更新菜谱池…") + ")") }
         regeneratePool()
-        main.launch { eval("window.toast && window.toast(" + jsSafe("菜谱池已更新") + ")") }
+        main.launch { eval("window.toast && window.toast(" + jsStr("菜谱池已更新") + ")") }
     }
 
     private fun handleReminderSettings(p: JsonObject) {
@@ -683,6 +683,11 @@ class WebAppBridge(
     /** JSON 放 JS 字符串字面量: 转义 U+2028/2029 (D-34) */
     private fun jsSafe(json: String): String =
         json.replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
+
+    /** 普通文本 → 带引号的 JS 字符串字面量 (用于 toast 等注入; 2026-09-05 修复: 原 jsSafe 不加引号导致 toast 语法错误) */
+    private fun jsStr(s: String): String =
+        "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\r", "\\r").replace("\n", "\\n")
+            .replace("\u2028", "\\u2028").replace("\u2029", "\\u2029") + "\""
 
     private fun toStockQty(value: Double, fromUnit: String, stockUnit: String): Double {
         val f = WebData.unitFactor(fromUnit)
