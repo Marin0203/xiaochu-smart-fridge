@@ -37,7 +37,8 @@ object PreservationTable {
         }
     }
 
-    /** 最长优先包含匹配; 该区不推荐 → 其它推荐区(冷藏→冷冻→常温) */
+    /** 最长优先包含匹配(双向: 规则名含食材名 或 食材名含规则名, 如 "鸡蛋" ↔ "鲜鸡蛋");
+     *  该区不推荐 → 其它推荐区(冷藏→冷冻→常温) */
     fun daysFor(name: String, zone: String): Int? {
         if (rows.isEmpty()) return null
         val z = when (zone) {
@@ -48,7 +49,7 @@ object PreservationTable {
         }
         var best: IntArray? = null
         for ((n, v) in rows) {
-            if (name.contains(n)) { best = v; break }   // rows 已按长度降序 → 首个命中即最长
+            if (name.contains(n) || n.contains(name)) { best = v; break }   // rows 按长度降序 → 首个命中即最长
         }
         val b = best ?: return null
         if (b[z] >= 0) return b[z]
