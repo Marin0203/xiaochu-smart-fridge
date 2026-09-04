@@ -1,6 +1,6 @@
 {
-    "appVersion":  "1.1.3",
-    "versionCode":  7,
+    "appVersion":  "1.1.4",
+    "versionCode":  8,
     "appName":  "小厨",
     "scheme":  "APK=semver 三段式(versionName)+单调递增 versionCode; UI 页面版本=服务端 ui_releases 序列(1.0.x, 与 appVersion 解耦, 由 ui-publish 函数维护)",
     "rules":  [
@@ -9,13 +9,13 @@
                   "已有构建产物不回溯改名; 本文件记录其身份与内嵌页面 sha"
               ],
     "uiContract":  1,
-    "chainSha256":  "006b65b908f24d1bf2a231297a3281c7a7ca7a1790e49f0c584c23f0b1f5a33d",
-    "chainSize":  89161,
+    "chainSha256":  "6b94eb9ab19bc95a59a11dd9a3e23d6bbf2292bbac826668e3677ba47eeceab3",
+    "chainSize":  89666,
     "chainNote":  "sync-page.ps1 校验通过后自动写入; 构建/发布前必须 == 链上唯一源 sha",
     "server":  {
-                   "latestVersion":  "1.0.25",
-                   "sha256":  "d0e5e047fc46d2f6d2c2ce2946a4751703850eca8c745332cb8f08cc28ce8a09",
-                   "lastPublishAt":  "2026-09-04T01:10:58.586Z",
+                   "latestVersion":  "1.0.28",
+                   "sha256":  "d36a2fcc076fc4a8406ad435b43eb70acbefbe7e5168f0ceba5d15b5fd20cd0b",
+                   "lastPublishAt":  "2026-09-04T01:23:34.606Z",
                    "note":  "publish.mjs 成功后自动维护; 1.0.16 含touch实验代码, 建议下次用链上活稿发布覆盖"
                },
     "artifacts":  [
