@@ -1307,7 +1307,8 @@
     var t = e.target;
     window.emit('trace', {msg: 'clickHit ' + ((t && t.tagName) || '?') + '.' + ((t && t.className) || '').toString().slice(0, 36)});
   }, true);
-  /* 按钮 touch 驱动（touchstart 通道已验证可靠；touchend/click 在远程页面被吞） */
+  /* 按钮 touch 驱动（touchstart 通道已验证可靠；touchend/click 在远程页面被吞）
+     刷新键: 短按=池内随机(doRefresh); 长按600ms=重新生成池(refresh-pool) */
   var lastBtnT = 0;
   document.addEventListener('touchstart', function(e){
     var t = e.target && e.target.closest ? e.target.closest('.pill-btn, .circle-btn[data-act]') : null;
@@ -1317,7 +1318,17 @@
     window.emit('trace', {msg: 'btnTouch ' + (act || '?')});
     if (act === 'hc') window.healthTap && window.healthTap(t);
     if (act === 'upd') window.uiUpdateTap && window.uiUpdateTap(t);
-    if (act === 'refresh') window.doRefresh && window.doRefresh(t);
+    if (act === 'refresh'){
+      window.__lpFired = false; window.__lpBtn = t;
+      if (window.__lpT) clearTimeout(window.__lpT);
+      window.__lpT = setTimeout(function(){ window.__lpFired = true; window.emit('refresh-pool', {}); }, 600);
+    }
+  }, true);
+  document.addEventListener('touchend', function(){
+    if (window.__lpT){
+      clearTimeout(window.__lpT); window.__lpT = null;
+      if (!window.__lpFired && window.__lpBtn){ window.doRefresh && window.doRefresh(window.__lpBtn); }
+    }
   }, true);
 
   window.addEventListener('touchstart', swDown, {passive: true});

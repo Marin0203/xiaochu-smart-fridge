@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
+import kotlinx.coroutines.delay
 import com.smartfridge.app.UiUpdater
 import androidx.core.content.ContextCompat
 import com.smartfridge.app.ai.localFallbackRecipes
@@ -109,6 +110,7 @@ class WebAppBridge(
                     "reminder-settings" -> main.launch { handleReminderSettings(p) }
                     "recipe-mode" -> main.launch { handleRecipeMode(p) }
                     "check-update" -> main.launch { handleCheckUpdate() }
+                    "refresh-pool" -> main.launch { handleRefreshPool() }
                     "edit-fresh" -> main.launch { handleEditFresh(p) }
                 }
             } catch (e: Exception) {
@@ -219,6 +221,13 @@ class WebAppBridge(
             eval("window.setUiUpdate && window.setUiUpdate({\"cur\":\"$cur\",\"target\":\"\",\"state\":\"ok\"})")
             main.launch { android.widget.Toast.makeText(context, "已是最新版本", android.widget.Toast.LENGTH_SHORT).show() }
         }
+    }
+
+    /** 长按刷新按钮: 主动重新生成池(更新完提示, 下一次短按即用新池) */
+    private suspend fun handleRefreshPool() {
+        main.launch { android.widget.Toast.makeText(context, "正在更新菜谱池…", android.widget.Toast.LENGTH_SHORT).show() }
+        regeneratePool()
+        main.launch { android.widget.Toast.makeText(context, "菜谱池已更新", android.widget.Toast.LENGTH_SHORT).show() }
     }
 
     private fun handleReminderSettings(p: JsonObject) {
@@ -380,9 +389,78 @@ class WebAppBridge(
         main.launch { pushInvNow() }
     }
 
-    /** 仅库存 (本地变更后快速回灌) */
+    /** 仅库存 (本地变更后快速回灌, 并防抖调度池刷新: 库存变更→池预刷新→以后开机直接用缓存) */
     fun pushInv() {
         main.launch { pushInvNow() }
+        scheduleRefresh(6000)
+    }
+
+    // ---------- 食谱池: 磁盘缓存 + 签名判脏 + 防抖刷新 ----------
+    @Volatile private var poolRefreshJob: kotlinx.coroutines.Job? = null
+    @Volatile private var lastPoolAt = 0L
+
+    private fun itemsSignature(): String =
+        services.sync.items.value.joinToString("|") { "${it.name}:${it.quantity}:${it.updatedAt.toEpochMilli()}" }.hashCode().toString()
+
+    private fun poolFile() = java.io.File(context.filesDir, "recipe_pool.json")
+
+    private fun Recipe.toPoolJson(): kotlinx.serialization.json.JsonObject = kotlinx.serialization.json.buildJsonObject {
+        put("title", title)
+        put("minutes", kotlinx.serialization.json.JsonPrimitive(minutes))
+        put("uses", kotlinx.serialization.json.JsonArray(uses.map { kotlinx.serialization.json.JsonPrimitive(it) }))
+        put("ingredients", kotlinx.serialization.json.JsonArray(ingredients.map { l ->
+            kotlinx.serialization.json.buildJsonObject { put("name", l.name); put("amount", l.amount) }
+        }))
+        put("steps", kotlinx.serialization.json.JsonArray(steps.map { kotlinx.serialization.json.JsonPrimitive(it) }))
+        put("tips", kotlinx.serialization.json.JsonPrimitive(tips))
+    }
+
+    private fun persistPool(pool: List<Recipe>) {
+        try {
+            poolFile().writeText(kotlinx.serialization.json.Json.encodeToString(
+                kotlinx.serialization.json.JsonObject.serializer(),
+                kotlinx.serialization.json.buildJsonObject {
+                    put("items", kotlinx.serialization.json.JsonArray(pool.map { it.toPoolJson() }))
+                    put("sig", kotlinx.serialization.json.JsonPrimitive(itemsSignature()))
+                },
+            ), Charsets.UTF_8)
+        } catch (_: Exception) {}
+    }
+
+    /** 读磁盘池; 返回 true=签名过期(需后台刷新), false=无缓存/与你一致 */
+    private fun loadPool(): Boolean {
+        try {
+            val f = poolFile()
+            if (!f.exists()) return false
+            val obj = kotlinx.serialization.json.Json.parseToJsonElement(f.readText()).jsonObject
+            val pool = (obj["items"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull {
+                (it as? kotlinx.serialization.json.JsonObject)?.let { o -> Recipe.fromJson(o) }
+            } ?: emptyList()
+            if (pool.isEmpty()) return false
+            recipePool = pool
+            val cachedSig = obj["sig"]?.jsonPrimitive?.contentOrNull ?: ""
+            Trace.log(context, "pool: LOADED ${pool.size} cachedSig=${cachedSig} curSig=${itemsSignature()}")
+            return cachedSig != itemsSignature()
+        } catch (_: Exception) { return false }
+    }
+
+    /** 防抖调度的池刷新(库存变更后6s / 缓存过期后3s), 不打扰当前显示; 刚生成过(8s内)则跳过, 避免启动重复生成 */
+    private fun scheduleRefresh(delayMs: Long) {
+        poolRefreshJob?.cancel()
+        poolRefreshJob = scope.launch {
+            delay(delayMs)
+            if (System.currentTimeMillis() - lastPoolAt < 8000) {
+                Trace.log(context, "pool: skip (fresh ${System.currentTimeMillis() - lastPoolAt}ms)")
+                return@launch
+            }
+            if (recipePool.isNotEmpty() && releasedTitles.isNotEmpty()) {
+                /* 静默预刷新: 直接换池, 不推送(用户下次短按自然用新池) */
+                regeneratePool()
+                Trace.log(context, "pool: PRE-REFRESHED ${recipePool.size}")
+            } else {
+                regenerateAndRelease()
+            }
+        }
     }
 
     private fun pushInvNow() {
@@ -412,39 +490,59 @@ class WebAppBridge(
             Trace.log(context, "recipes: items empty, postpone AI")
             return
         }
-        // 池非空 → 直接从 30 道随机出 5(零等待)
+        // 开机: 池空 → 先读磁盘缓存(秒开); 签名字符串不符 → 后台判脏重生成(不阻塞显示)
+        if (recipePool.isEmpty()) {
+            val stale = loadPool()
+            if (stale) scheduleRefresh(3000)   /* 磁盘池与当前库存签名不一致 → 后台更新 */
+        }
+        // 池非空(内存或缓存) → 直接从池出(零等待)
         if (recipePool.isNotEmpty()) {
             sliceFromPool()
             return
         }
-        scope.launch {
-            val plan = try {
-                val items = services.sync.items.value
-                val all = items.map { ExpiringItem.fromIngredient(it) }
-                // 生成时检测临期: 始终把黄/红食材作为"临期列表"传给服务端(其按 至多10道临期约束 生成)
-                val expiring = items.filter { it.freshnessStatus().isAlert }.map { ExpiringItem.fromIngredient(it) }
-                // 池生成固定 NORMAL 请求(约30道): 开关只影响"筛选展示", 不改变生成
-                val mode = com.smartfridge.app.domain.RecipeMode.NORMAL
-                val p = services.ai.recommendRecipes(
-                    expiring, all.take(20), mode,
-                    avoid = releasedTitles.takeLast(20),   /* 避重: 已发放过的菜 */
-                )
-                Trace.log(context, "recipes: AI ok=${p.ok} count=${p.recipes.size} err=${p.error ?: "-"}")
-                p
-            } catch (e: Exception) {
-                Trace.log(context, "recipes: AI FAILED ${e.message} -> localFallback")
-                localFallbackRecipes(emptyList())
-            }
-            // 一次入池(去重, 至多 30), 随即首发一批
-            recipePool = plan.recipes.distinctBy { it.title }.take(30)
-            val batch = releaseBatch()
-            val batchPlan = RecipePlan(plan.ok, plan.fromFallback, batch, plan.rawMarkdown, plan.error)
-            recipesPlan = batchPlan
-            releasedTitles += batchPlan.recipes.map { it.title }
-            recipesJson = withOden(badgeRecipes(batchPlan))   /* 每批一次性烘焙(关东煮插位+徽章定死) */
-            Trace.log(context, "recipes: GENERATE pool=${recipePool.size}")
-            main.launch { pushInvNow() }
+        scope.launch { regenerateAndRelease() }
+    }
+
+    /** 生成30道新池(至多10道临期)并落盘; 然后首发一批 */
+    private suspend fun regenerateAndRelease() {
+        regeneratePool()
+        val batch = releaseBatch()
+        val plan = RecipePlan(true, false, batch, null, null)
+        recipesPlan = plan
+        releasedTitles += batch.map { it.title }
+        recipesJson = withOden(badgeRecipes(plan))
+        main.launch { pushInvNow() }
+    }
+
+    /** 核心: 调 AI 生成 → 入池(√30) → 持久化 */
+    private suspend fun regeneratePool() {
+        val plan = try {
+            val items = services.sync.items.value
+            val all = items.map { ExpiringItem.fromIngredient(it) }
+            // 生成时检测临期: 始终把黄/红食材作为"临期列表"传给服务端(其按 至多10道临期约束 生成)
+            val expiring = items.filter { it.freshnessStatus().isAlert }.map { ExpiringItem.fromIngredient(it) }
+            // 池生成固定 NORMAL 请求(约30道): 开关只影响"筛选展示", 不改变生成
+            val mode = com.smartfridge.app.domain.RecipeMode.NORMAL
+            val p = services.ai.recommendRecipes(
+                expiring, all.take(20), mode,
+                avoid = releasedTitles.takeLast(20),   /* 避重: 已发放过的菜 */
+            )
+            Trace.log(context, "recipes: AI ok=${p.ok} count=${p.recipes.size} err=${p.error ?: "-"}")
+            p
+        } catch (e: Exception) {
+            Trace.log(context, "recipes: AI FAILED ${e.message} -> localFallback")
+            localFallbackRecipes(emptyList())
         }
+        // 兜底过滤: 丢弃"uses 与现有食材零交集"的菜(主料全需补充, 如糖醋蒜苔/酸汤虾滑)
+        val invNames = services.sync.items.value.map { it.name }.toSet()
+        val clean = plan.recipes.filter { r ->
+            r.uses.any { u -> invNames.any { e -> u.contains(e) || e.contains(u) } }
+        }
+        if (clean.size < plan.recipes.size) Trace.log(context, "recipes: FILTERED ${plan.recipes.size - clean.size} dishes without real ingredients")
+        recipePool = clean.distinctBy { it.title }.take(30)
+        lastPoolAt = System.currentTimeMillis()
+        persistPool(recipePool)
+        Trace.log(context, "recipes: GENERATE pool=${recipePool.size}")
     }
 
     /** 当前临期食材名集合(isAlert=非新鲜) */
