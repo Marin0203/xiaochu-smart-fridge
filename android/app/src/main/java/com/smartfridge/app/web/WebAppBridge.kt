@@ -18,6 +18,7 @@ import com.smartfridge.app.domain.ExpiringItem
 import com.smartfridge.app.domain.Ingredient
 import com.smartfridge.app.domain.IngredientDraft
 import com.smartfridge.app.domain.RecipeMode
+import com.smartfridge.app.domain.Recipe
 import com.smartfridge.app.domain.RecipePlan
 import com.smartfridge.app.domain.guessCategoryFor
 import kotlinx.coroutines.CoroutineScope
@@ -371,13 +372,22 @@ class WebAppBridge(
         eval("window.setData(" + jsSafe(json) + ")")
     }
 
-    /** 菜谱生成 (AI 优先, 失败本地兜底 5 道); 完成后回灌
-     *  数据未就绪时不抢跑 (空库存发 ai-recipe 会 400): 等 READY 后再次 pushAll 自然触发 */
+    /** 菜谱池(定稿版): 一次生成 30 道入池; 每次刷新从 30 道里随机乱序出 5 道(循环, 不抽走, 不再调用 AI)。
+     *  仅当: 空池(首启/模式切换后) → 调 AI 生成 30; 避重用已发过的标题 */
+    private val BATCH = 5
+    @Volatile private var recipePool: List<Recipe> = emptyList()
+    @Volatile private var releasedTitles: List<String> = emptyList()
+
     private fun refreshRecipesIfNeeded(force: Boolean) {
         if (recipesPlan != null && !force) return
         val ready = services.sync.items.value
         if (ready.isEmpty()) {
             Trace.log(context, "recipes: items empty, postpone AI")
+            return
+        }
+        // 池非空 → 直接从 30 道随机出 5(零等待)
+        if (recipePool.isNotEmpty()) {
+            sliceFromPool()
             return
         }
         scope.launch {
@@ -389,7 +399,7 @@ class WebAppBridge(
                 val mode = if (wantExpiring && expiring.isNotEmpty()) com.smartfridge.app.domain.RecipeMode.EXPIRING else com.smartfridge.app.domain.RecipeMode.NORMAL
                 val p = services.ai.recommendRecipes(
                     expiring, all.take(20), mode,
-                    avoid = recipesPlan?.recipes?.map { it.title } ?: emptyList(),
+                    avoid = releasedTitles.takeLast(20),   /* 避重: 已发放过的菜 */
                 )
                 Trace.log(context, "recipes: AI ok=${p.ok} count=${p.recipes.size} err=${p.error ?: "-"}")
                 p
@@ -397,10 +407,27 @@ class WebAppBridge(
                 Trace.log(context, "recipes: AI FAILED ${e.message} -> localFallback")
                 localFallbackRecipes(emptyList())
             }
-            recipesPlan = plan
-            recipesJson = withOden(badgeRecipes(plan))   /* 一次性烘焙(关东煮插位+徽章定死) */
+            // 一次入池(去重, 至多 30), 随即首发一批
+            recipePool = plan.recipes.distinctBy { it.title }.take(30)
+            val batch = recipePool.shuffled().take(BATCH)
+            val batchPlan = RecipePlan(plan.ok, plan.fromFallback, batch, plan.rawMarkdown, plan.error)
+            recipesPlan = batchPlan
+            releasedTitles += batchPlan.recipes.map { it.title }
+            recipesJson = withOden(badgeRecipes(batchPlan))   /* 每批一次性烘焙(关东煮插位+徽章定死) */
+            Trace.log(context, "recipes: GENERATE pool=${recipePool.size}")
             main.launch { pushInvNow() }
         }
+    }
+
+    /** 从 30 道池里随机乱序出 5(不抽走, 循环模式): 无网络, 秒级; 每批独立烘焙(关东煮/徽章) */
+    private fun sliceFromPool() {
+        val batch = recipePool.shuffled().take(BATCH)
+        val plan = RecipePlan(true, false, batch, null, null)
+        recipesPlan = plan
+        releasedTitles += batch.map { it.title }
+        recipesJson = withOden(badgeRecipes(plan))
+        Trace.log(context, "recipes: SLICE from pool(${recipePool.size})")
+        main.launch { pushInvNow() }
     }
 
     /** 常驻菜：关东煮（用户对象“没想法就吃这个”——AI 刷新不替换，永远置顶） */
