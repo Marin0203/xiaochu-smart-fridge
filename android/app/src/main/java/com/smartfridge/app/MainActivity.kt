@@ -97,10 +97,10 @@ class MainActivity : BridgeActivity(), FridgeNative.Host {
                         Trace.log(this@MainActivity, "READY items=${services.sync.items.value.size}")
                         services.migrateLegacyCategories()
                         bridge?.pushAll()
+                        // 保质期 v2 迁移(一次性): 等 items 加载完成后执行(空则不置标记, 下次重试)
+                        lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) { services.sync.upgradeShelfV2() }
                     }
                     bridge?.pushAll()
-                    // 保质期 v2 迁移(一次性): 存量食材按新版保鲜表抬高 shelfLifeDays
-                    lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) { services.sync.upgradeShelfV2() }
                 }
             }
         }

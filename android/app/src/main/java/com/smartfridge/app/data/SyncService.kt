@@ -194,12 +194,19 @@ class SyncService(
     /** 保质期 v2 一次性迁移(2026-09-04): 现存食材按新版保鲜表抬高 shelfLifeDays(只升不降, 不缩短);
      *  AI 识别的商品保质期用于新录入, 存量以保鲜表为准 */
     suspend fun upgradeShelfV2() {
-        if (db.getMeta("shelf_v2_done") == "1") return
+        if (db.getMeta("shelf_v2_done_1") == "1") return
+        val items = items.value
+        android.util.Log.i("XC_TRACE", "shelf-v2: start items=${items.size} flag=${db.getMeta("shelf_v2_done_1")}")
+        if (items.isEmpty()) {
+            android.util.Log.i("XC_TRACE", "shelf-v2: items 未加载, 下次重试")
+            return   // 不置标记: 等下次启动数据就绪再迁移
+        }
         val updated = mutableListOf<Pair<Ingredient, Int>>()
-        for (i in items.value) {
+        for (i in items) {
             val t = FreshnessTable.daysFor(i.name, i.zone.db) ?: continue
             if (t > i.shelfLifeDays) updated.add(i to t)
         }
+        android.util.Log.i("XC_TRACE", "shelf-v2: updated=${updated.size} (${updated.take(8).joinToString { "${it.first.name}:${it.first.shelfLifeDays}->${it.second}" }})")
         if (updated.isNotEmpty()) {
             for ((i, days) in updated) {
                 val n = i.copyWith(shelfLifeDays = days, updatedAt = Instant.now())

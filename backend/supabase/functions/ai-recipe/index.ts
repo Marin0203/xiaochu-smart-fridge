@@ -20,7 +20,7 @@ const SYSTEM_RECIPE_EXPIRING = `
 1. 每道菜必须至少吃掉 1 种 uses 列出的临期食材; 5 道菜合计尽量覆盖全部临期食材
 2. 步骤用中文、简洁、可按顺序执行
 3. 只输出 JSON, 不要解释; 若接口要求对象形式, 同样按上面结构返回
-4. 【求新】每次刷新从 [家常快手|下饭硬菜|清淡汤菜|烩煮一锅|凉拌清爽] 中随机一个基调, 5 道菜围绕该基调且互不重复; 若提供了【上次已做过的菜】, 除非食材限制否则避免完全重复(换做法/配菜也算新)
+4. 【求新·最高优先】本批基调=__MOOD__。5 道菜必须全部围绕该基调；与【上次已做过的菜】相比: 最多允许 2 道同名且必须换做法/配菜, 其余必须为全新菜品(同名不同法也算新)；绝不允许整批与上次相同
 
 约束 (最高优先级, 必须严格遵守):
 1. 只能使用用户给出的食材 + 家常调料(油盐酱醋糖葱姜蒜等), 不得添加用户未列出的主料或特殊配料
@@ -44,7 +44,7 @@ const SYSTEM_RECIPE_NORMAL = `
 1. 尽量只用现有食材, 缺的少量用料标"需补充:xxx"; 5 道菜风格尽量不同
 2. 步骤用中文、简洁、可按顺序执行
 3. 只输出 JSON, 不要解释; 若接口要求对象形式, 同样按上面结构返回
-4. 【求新】每次刷新从 [家常快手|下饭硬菜|清淡汤菜|烩煮一锅|凉拌清爽] 中随机一个基调, 5 道菜围绕该基调且互不重复; 若提供了【上次已做过的菜】, 除非食材限制否则避免完全重复(换做法/配菜也算新)
+4. 【求新·最高优先】本批基调=__MOOD__。5 道菜必须全部围绕该基调；与【上次已做过的菜】相比: 最多允许 2 道同名且必须换做法/配菜, 其余必须为全新菜品(同名不同法也算新)；绝不允许整批与上次相同
 
 约束 (最高优先级, 必须严格遵守):
 1. 只能使用用户给出的食材 + 家常调料(油盐酱醋糖葱姜蒜等), 不得添加用户未列出的主料或特殊配料
@@ -54,6 +54,12 @@ const SYSTEM_RECIPE_NORMAL = `
 `;
 
 type Item = { name: string; quantity: number; unit: string; freshness_percent: number; days_left: number };
+
+/** 每请求随机基调(保底"每次刷新都不一样"): 服务端随机注入, 与客户端无关 */
+const MOODS = ["家常快手", "下饭硬菜", "清淡汤菜", "烩煮一锅", "凉拌清爽", "面食主食", "辣味下饭", "酸甜开胃", "蒜香浓郁", "汤羹暖胃", "煎炸小食", "砂锅炖烧"];
+function pickMood(): string {
+  return MOODS[Math.floor(Math.random() * MOODS.length)];
+}
 
 function buildRecipeUser(
   expiring: Item[],
@@ -228,7 +234,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const system = mode === "normal" ? SYSTEM_RECIPE_NORMAL : SYSTEM_RECIPE_EXPIRING;
+    const system = (mode === "normal" ? SYSTEM_RECIPE_NORMAL : SYSTEM_RECIPE_EXPIRING).replace("__MOOD__", pickMood());
     const user = mode === "normal"
       ? buildNormalRecipeUser(context.length > 0 ? context : expiring, avoid)
       : buildRecipeUser(expiring, context, avoid);
