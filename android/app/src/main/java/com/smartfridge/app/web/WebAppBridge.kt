@@ -211,23 +211,23 @@ class WebAppBridge(
             UiUpdater.downloadNow(
                 context, services,
                 onDone = { ver -> main.launch {
-                    android.widget.Toast.makeText(context, "已更新至 v$ver，正在刷新…", android.widget.Toast.LENGTH_SHORT).show()
-                    eval("location.reload()")
+                    eval("window.toast && window.toast(" + jsSafe("已更新至 v$ver，正在刷新…") + ")")
+                    eval("setTimeout(function(){ location.reload(); }, 1200)")   /* 先看主题弹窗, 再刷新 */
                 } },
-                onFail = { msg -> main.launch { android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show() } },
+                onFail = { msg -> main.launch { eval("window.toast && window.toast(" + jsSafe(msg) + ")") } },
             )
         } else {
             Trace.log(context, "check-update: up to date ($cur)")
             eval("window.setUiUpdate && window.setUiUpdate({\"cur\":\"$cur\",\"target\":\"\",\"state\":\"ok\"})")
-            main.launch { android.widget.Toast.makeText(context, "已是最新版本", android.widget.Toast.LENGTH_SHORT).show() }
+            main.launch { eval("window.toast && window.toast(" + jsSafe("已是最新版本") + ")") }
         }
     }
 
     /** 长按刷新按钮: 主动重新生成池(更新完提示, 下一次短按即用新池) */
     private suspend fun handleRefreshPool() {
-        main.launch { android.widget.Toast.makeText(context, "正在更新菜谱池…", android.widget.Toast.LENGTH_SHORT).show() }
+        main.launch { eval("window.toast && window.toast(" + jsSafe("正在更新菜谱池…") + ")") }
         regeneratePool()
-        main.launch { android.widget.Toast.makeText(context, "菜谱池已更新", android.widget.Toast.LENGTH_SHORT).show() }
+        main.launch { eval("window.toast && window.toast(" + jsSafe("菜谱池已更新") + ")") }
     }
 
     private fun handleReminderSettings(p: JsonObject) {
