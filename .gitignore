@@ -43,6 +43,10 @@ node_modules/
 *.log
 *.log.*
 
+# ---------- 冻结模块的大二进制（2026-09-04: 模型移出 git，工作树保留；克隆不携带 65MB） ----------
+# :speech 模块未被 :app 依赖（不进 APK）；模型完整副本见 D:\work2\android-local-speech-recognition\assets\
+android/speech/src/main/assets/vosk-model-small-cn-0.22/
+
 # ---------- 会话与杂项 ----------
 .session_restore/
 .idea/
