@@ -143,7 +143,11 @@ class WebAppBridge(
         val unit = p["unit"]?.jsonPrimitive?.contentOrNull ?: "个"
         val zone = WebData.zoneFromKey(p["zone"]?.jsonPrimitive?.contentOrNull ?: "chill")
         val tag = p["tag"]?.jsonPrimitive?.contentOrNull
-        val created = services.sync.addDrafts(listOf(IngredientDraft(name, qty, unit, zone, 3)), "小厨")
+        // 保质期优先用 AI 识别的 shelfLifeDays(1..3650), 缺省回退保鲜表
+        val shelf = p["shelfLifeDays"]?.jsonPrimitive?.intOrNull
+        val days = if (shelf != null && shelf in 1..3650) shelf
+            else com.smartfridge.app.domain.FreshnessTable.daysFor(name, zone.db) ?: 3
+        val created = services.sync.addDrafts(listOf(IngredientDraft(name, qty, unit, zone, days)), "小厨")
         // 页面自选分类 (tag) 覆盖规则分类 (A 套图标由页面负责, Kotlin 只存数据)
         if (tag != null && tag.isNotBlank()) {
             created.firstOrNull { it.name == name }?.let { it2 ->
@@ -199,12 +203,7 @@ class WebAppBridge(
             "✅ DeepSeek · 识别就绪（ai-parse 正常）"
         }.getOrElse { e -> "❌ DeepSeek · ${e.message}" }
 
-        // 临期检查一次：真查库存（有临期会立即发通知；无临期则安静）
-        lines += runCatching {
-            com.smartfridge.app.notify.ExpiryReminder.checkNow(context)
-            "✅ 临期检查 · 已触发（如有临期请留意通知）"
-        }.getOrElse { e -> "❌ 临期检查 · ${e.message}" }
-
+        // 临期提醒功能已下线(2026-09-04): 体检不再触发检查/通知
         val report = lines.joinToString("\n")
         Trace.log(context, "health: $report")
         eval("window.showHealthReport(${kotlinx.serialization.json.JsonPrimitive(report)})")
@@ -308,6 +307,7 @@ class WebAppBridge(
                             put("unit", d.unit)
                             put("zone", WebData.zoneKey(d.zone))
                             put("cat", com.smartfridge.app.domain.guessCategoryFor(d.name, d.zone))
+                            put("shelfLifeDays", d.shelfLifeDays)   /* AI 商品保质天 → 页面透传 → add 事件 */
                         })
                     }
                 })
@@ -417,13 +417,13 @@ class WebAppBridge(
         })
     }
 
-    /** 关东煮出现概率（%）：AI 菜谱完成后的每次刷新抽签；占位期（AI 未回）仍兜底显示 */
-    private val ODEN_CHANCE = 60
+    /** 关东煮=普通菜，只提高出现概率(80%)：AI 结果返回后才插入(不再占位"看门")；位置随机 1..n+1 */
+    private val ODEN_CHANCE = 80
 
-    /** 把关东煮插入菜谱（概率 ODEN_CHANCE%，位置随机 1..n+1）
-     *  空菜单（AI 未回）时必出：保证"没想法"时至少有一道可煮 */
+    /** 把关东煮插入菜谱（概率 ODEN_CHANCE%；AI 未回/空结果时不插入，交给页面加载态） */
     private fun withOden(recipesObj: kotlinx.serialization.json.JsonObject): kotlinx.serialization.json.JsonObject {
-        if (recipesObj.isNotEmpty() && (0 until 100).random() >= ODEN_CHANCE) return recipesObj
+        if (recipesObj.isEmpty()) return recipesObj
+        if ((0 until 100).random() >= ODEN_CHANCE) return recipesObj
         val out = kotlinx.serialization.json.buildJsonObject {
             val keys = recipesObj.keys.toList()
             val pos = (0..keys.size).random()

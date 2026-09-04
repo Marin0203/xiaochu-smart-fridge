@@ -9,13 +9,13 @@
     "已有构建产物不回溯改名; 本文件记录其身份与内嵌页面 sha"
   ],
   "uiContract": 1,
-  "chainSha256": "f90def21bf3de116ef70cdeab05767bbab312bde9653132fb07caed132f4e943",
-  "chainSize": 85240,
+  "chainSha256": "f33addc49b27012141b92d56676eb306f0b103c29ad8ccc1af2e914857fdf96a",
+  "chainSize": 88242,
   "chainNote": "sync-page.ps1 校验通过后自动写入; 构建/发布前必须 == 链上唯一源 sha",
   "server": {
-    "latestVersion": "1.0.20",
-    "sha256": "3ea6e263d439a5e80a427cdcde00c68a765f71926cbac6633374e1a310a3c3b0",
-    "lastPublishAt": "2026-09-03T23:17:13.887Z",
+    "latestVersion": "1.0.22",
+    "sha256": "616fccb13917aa1443d863d9ca3140472ba7c3aa0e925ddadc882daa49605f79",
+    "lastPublishAt": "2026-09-04T00:01:48.708Z",
     "note": "publish.mjs 成功后自动维护; 1.0.16 含touch实验代码, 建议下次用链上活稿发布覆盖"
   },
   "artifacts": [

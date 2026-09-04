@@ -12,7 +12,8 @@ object FreshnessTable {
         // name正则 -> (FRIDGE天, FREEZER天, PANTRY天)   null=该区不推荐(保持原值)
         Regex("猪|牛|羊|肉|里脊|排骨") to Triple(4, 365, null),          // 生鲜红肉
         Regex("鸡|鸭|鹅|禽") to Triple(2, 300, null),                    // 生鲜禽肉
-        Regex("香肠|培根|火腿|腊肠|腊肉|午餐肉") to Triple(10, 45, null),// 加工肉
+        Regex("香肠|培根|火腿|腊肠|腊肉|午餐肉") to Triple(90, 180, null),// 加工肉(密封包装按标注, 冷藏 90 兜底)
+        Regex("蛋") to Triple(30, 180, null),                            // 蛋类(鸡蛋30, 咸蛋/皮蛋冷存更长)
         Regex("盐|糖|油|酱|醋|料酒|蚝油|味精|鸡精|胡椒|花椒|八角|香叶|桂皮|孜然|咖喱|蜂蜜|生抽|老抽") to Triple(null, null, 365), // 调味
         Regex("虾皮|海米|干贝|紫菜|海带干|干贝") to Triple(null, null, 365), // 干海产
         Regex("鱼|虾|蟹|贝|蛤|蛏|鱿|章|海参|生蚝|鲍|龙虾") to Triple(2, 180, null), // 海鲜水产

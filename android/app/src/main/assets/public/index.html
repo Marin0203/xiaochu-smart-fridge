@@ -296,6 +296,7 @@
           <div class="t" id="hdT">库存</div>
         </div>
         <div class="acts">
+          <button class="circle-btn" id="btnSort" onclick="cycleSort()" title="按保质期排序（点击切换 升/降/默认）"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4v16M8 20l-3.5-3.5M8 20l3.5-3.5M16 20V4M16 4l-3.5 3.5M16 4l3.5 3.5"/></svg></button>
           <button class="circle-btn" id="btnSync" onclick="doSync(this)" title="同步库存"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg></button>
           <button class="circle-btn" id="btnRefresh" onclick="doRefresh(this)" style="display:none" title="刷新菜谱"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg></button>
         </div>
@@ -423,10 +424,10 @@
       </div>
     </div>
 
-    <!-- 文字录入浮窗 -->
+    <!-- 文字录入/删减浮窗（add 模式添加 / deduct 模式扣减） -->
     <div class="overlay" id="ovAdd" onclick="if(event.target===this)closeAdd()">
       <div class="modal">
-        <div class="m-head"><div class="m-title">添加食材</div><button class="m-close" onclick="closeAdd()">✕</button></div>
+        <div class="m-head"><div class="m-title"><span id="addTitle">添加食材</span></div><button class="m-close" onclick="closeAdd()">✕</button></div>
         <div class="m-label">📝 一句话交给 DeepSeek</div>
         <textarea class="num" id="aiText" rows="2" placeholder="如：今天买了半斤猪肉和三个番茄" style="width:100%;resize:none;text-align:left;font-weight:600"></textarea>
         <div id="aiList" style="margin-top:8px"></div>
@@ -570,8 +571,21 @@
       (it.days != null ? '<span style="color:var(--ink2)">· 剩 ' + it.days + ' 天</span>' : '') + '</div>' +
       '<div class="fresh" style="--c:' + it.c + ';--w:' + it.w + '%"><i></i></div></div>';
   }
+  var sortMode = 'def';   /* 库存排序: def 默认 / asc 保质期短→长 / desc 长→短 */
+  function cycleSort(){
+    sortMode = sortMode === 'def' ? 'asc' : (sortMode === 'asc' ? 'desc' : 'def');
+    toast(sortMode === 'asc' ? '按保质期 ↑ 先吃最近的 🌿' : (sortMode === 'desc' ? '按保质期 ↓ 后吃临期的' : '已恢复默认顺序'));
+    renderZone();
+  }
   function renderZone(){
     var list = visible();
+    if (sortMode !== 'def'){
+      var key = function(x){ return x.it.days == null ? 99999 : x.it.days; };
+      list = list.slice().sort(function(a, b){
+        var d = key(a) - key(b);
+        return sortMode === 'asc' ? d : -d;
+      });
+    }
     $('grid').innerHTML = list.length
       ? list.map(cardHtml).join('')
       : '<div class="empty">这个分区还没有食材 🌿<br>点右上角 🔍 可跨区查看其他大类</div>';
@@ -580,18 +594,18 @@
       ? '<div class="cross-note"><span>🌏 跨区查看 ·「' + curCat + '」</span><button onclick="pickCat(\'全部\')">退出筛选</button></div>'
       : '';
   }
-  /* 横幅 = 真实临期数据（days<=1 计数；关闭后当日不再提醒） */
+  /* 横幅 = 真实临期数据（剩<=2 天计数，含黄红新鲜度；关闭后当日不再提醒） */
   function refreshBanner(){
     var rec = JSON.parse(localStorage.getItem('xcRemind') || '{}');
     if (rec.date === new Date().toDateString() && rec.closed){ return; }
-    var expire = 0;
+    var expire = 0; var names = [];
     Object.keys(DATA).forEach(function(z){
       DATA[z].forEach(function(it){
-        if (it.days != null && it.days <= 1) expire++;
+        if (it.days != null && it.days <= 2){ expire++; if (names.length < 4) names.push(it.n); }
       });
     });
     if (expire > 0){
-      $('bannerBox').innerHTML = '<div class="banner" id="banner"><div class="dot"></div>' + expire + ' 件食材将在 24 小时内到期 · 建议今晚吃掉 🥢' +
+      $('bannerBox').innerHTML = '<div class="banner" id="banner"><div class="dot"></div>' + expire + ' 件食材将在 48 小时内到期' + (names.length ? '（' + names.join('、') + (expire > names.length ? '…' : '') + '）' : '') + ' · 建议今晚吃掉 🥢' +
         '<button onclick="dismissBanner()" style="margin-left:auto;border:none;background:none;color:var(--corn);font-size:16px;cursor:pointer" title="今日不再提醒">✕</button></div>';
     } else {
       $('bannerBox').innerHTML = '';
@@ -826,12 +840,18 @@
     renderZone();
   }
 
-  /* 文字录入（一句话 → 智能识别 → 逐项可编辑：名称/数量/单位/分区） */
+  /* 文字录入/删减（一句话 → 智能识别 → 逐项可编辑：名称/数量/单位/分区） */
   var addItems = [];
-  function openAdd(){
+  var addMode = 'add';   /* 'add' 添加入库 / 'deduct' 删减出库 */
+  function openAdd(mode){
+    addMode = mode || 'add';
     addItems = [];
     $('aiText').value = ''; $('aiList').innerHTML = '';
     if (window.bridgeMode !== 'demo'){ window.emit('sync', {}); }   /* 录入前先拉最新云端，避免同步冲突 */
+    $('addTitle').textContent = addMode === 'deduct' ? '食材删减' : '添加食材';
+    $('aiText').placeholder = addMode === 'deduct'
+      ? '如：番茄炒蛋用掉了两个番茄和一根葱'
+      : '如：今天买了半斤猪肉和三个番茄';
     var b = $('addMainBtn'); b.textContent = '识别'; b.setAttribute('onclick', 'aiParseNow()');
     $('ovAdd').classList.add('show');
   }
@@ -854,13 +874,31 @@
         '<input class="num" id="au' + i + '" value="' + x.unit + '" style="width:44px">' +
         '<button class="m-close" style="width:20px;height:20px;font-size:10px" onclick="this.parentNode.parentNode.style.display=\'none\'">✕</button></div>' +
         '<div style="display:flex;align-items:center;gap:6px;margin-top:7px">' +
-        '<span id="at' + i + '" style="font-size:11px;color:var(--corn);font-weight:700">' + (x.cat || '蔬菜') + '</span><span style="flex:1"></span>' +
+        '<span id="at' + i + '" style="font-size:11px;color:var(--corn);font-weight:700">' + (x.cat || '蔬菜') + '</span>' +
+        '<span style="font-size:11px;color:var(--ink2);opacity:.75;margin-left:4px">保质期 ' + (x.shelfLifeDays > 0 ? x.shelfLifeDays : '—') + ' 天</span><span style="flex:1"></span>' +
         '<button class="chip' + ((x.zone || 'chill') === 'chill' ? ' on' : '') + '" style="padding:3px 10px;font-size:11.5px" onclick="onZoneIn(' + i + ',\'chill\',this)">冷藏</button>' +
         '<button class="chip' + ((x.zone || 'chill') === 'freeze' ? ' on' : '') + '" style="padding:3px 10px;font-size:11.5px" onclick="onZoneIn(' + i + ',\'freeze\',this)">冷冻</button>' +
         '<button class="chip' + ((x.zone || 'chill') === 'ambient' ? ' on' : '') + '" style="padding:3px 10px;font-size:11.5px" onclick="onZoneIn(' + i + ',\'ambient\',this)">常温</button>' +
         '</div></div>';
     }).join('');
-    var b = $('addMainBtn'); b.textContent = '添加'; b.setAttribute('onclick', 'addConfirm()');
+    var b = $('addMainBtn'); b.textContent = addMode === 'deduct' ? '扣除' : '添加';
+    b.setAttribute('onclick', addMode === 'deduct' ? 'deductConfirm()' : 'addConfirm()');
+  }
+  /* 删减确认：识别明细 → 桥 deduct（Kotlin 落库后 setData 回灌） */
+  function deductConfirm(){
+    var ded = [];
+    addItems.forEach(function(x, i){
+      var row = $('aiList').children[i];
+      if (row && row.style.display === 'none') return;
+      var name = ($('an' + i) ? $('an' + i).value : x.name) || '';
+      var qty = parseFloat($('aq' + i) ? $('aq' + i).value : x.qty);
+      var unit = ($('au' + i) ? $('au' + i).value : x.unit) || '';
+      if (name && qty > 0) ded.push({name: name, qty: qty, unit: unit});
+    });
+    if (!ded.length){ toast('没有可扣除的食材 🤔'); return; }
+    window.emit('deduct', {items: ded});
+    closeAdd();
+    toast('正在扣除 ' + ded.length + ' 项食材 · 扣完看库存 🌿');
   }
   function aiParseNow(){
     var text = $('aiText').value.trim();
@@ -951,7 +989,11 @@
       var zone = x.zone || 'chill';
       var it = {n: name, q: qty, u: unit, tag: tag, k: tagKey(tag), zone: zone, w: 100, c: '#5FA45C', note: '很新鲜'};
       DATA[zone].unshift(it);
-      if (it.id == null){ window.emit('add', {name: it.n, qty: it.q, unit: it.u, zone: zone, tag: tag}); }
+      if (it.id == null){
+        var ev = {name: it.n, qty: it.q, unit: it.u, zone: zone, tag: tag};
+        if (x.shelfLifeDays > 0) ev.shelfLifeDays = x.shelfLifeDays;   /* AI 商品保质期透传(Kotlin 优先用) */
+        window.emit('add', ev);
+      }
       added++;
     });
     closeAdd(); renderZone();
@@ -967,6 +1009,7 @@
       '<div class="d-right">' + (r.b && swOn() ? '<span class="r-badge">临期优先</span>' : '') +
       '<button class="copy-btn" onclick="toast(\'菜名已复制 ✓ 去抖音搜「' + r.n + '」\')">📋 复制菜名</button></div></div>' +
       '<div style="font-size:12px;font-weight:700;color:var(--ink2);margin:0 0 6px">制作步骤</div>' +
+      '<button class="deduct" style="padding:10px;font-size:13px;background:var(--corn);margin-top:6px" onclick="openAdd(\'deduct\')">📝 一句话删减 · AI 识别后扣库存</button>' +
       r.steps.map(function(s, j){ return '<div class="step"><div class="sn">' + (j + 1) + '</div><div class="st">' + s + '</div></div>'; }).join('');
     $('detailScroll').innerHTML = h;
   }
