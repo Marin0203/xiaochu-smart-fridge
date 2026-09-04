@@ -35,6 +35,10 @@ class LocalWebServer(private val context: Context, private val webRoot: File) {
                             val header = "HTTP/1.1 200 OK\r\n" +
                                 "Content-Type: text/html; charset=utf-8\r\n" +
                                 "Content-Length: ${bytes.size}\r\n" +
+                                // 2026-09-04 缓存根修: 禁用一切缓存, 保证 WebView 每次都取磁盘最新页(此前界面长期=旧缓存页)
+                                "Cache-Control: no-store, no-cache, must-revalidate\r\n" +
+                                "Pragma: no-cache\r\n" +
+                                "Expires: 0\r\n" +
                                 "Connection: close\r\n\r\n"
                             val out = sock.getOutputStream()
                             out.write(header.toByteArray(Charsets.ISO_8859_1))

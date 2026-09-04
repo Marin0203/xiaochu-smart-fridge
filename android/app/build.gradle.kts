@@ -25,8 +25,8 @@ android {
         applicationId = "com.smartfridge.app"
         minSdk = 26          // android 8.0+ (java.time 可用)
         targetSdk = 34
-        versionCode = 9
-        versionName = "1.1.5"   // 语义化三段式 (对齐 v1.0.0); 唯一事实源见仓库根 VERSIONS.json; 每构建 versionCode +1
+        versionCode = 12
+        versionName = "1.1.8"   // 语义化三段式 (对齐 v1.0.0); 唯一事实源见仓库根 VERSIONS.json; 每构建 versionCode +1
 
         buildConfigField("String", "SUPABASE_URL", "\"${esc(secret("SUPABASE_URL"))}\"")
         buildConfigField("String", "SUPABASE_KEY", "\"${esc(secret("SUPABASE_KEY"))}\"")

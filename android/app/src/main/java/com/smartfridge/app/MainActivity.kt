@@ -123,6 +123,7 @@ class MainActivity : BridgeActivity(), FridgeNative.Host {
 
     /** Capacitor WebView（父 Bridge 提供；页面 ready 后可用） */
     private fun webView(): WebView? = getBridge()?.webView
+    private var cacheBustDone = false
 
     /** 当前生效的页面版本（files/web/version.json 的 ver；无 = 出厂种子未热更） */
     private fun loadedWebVersion(): String = try {
@@ -195,6 +196,13 @@ class MainActivity : BridgeActivity(), FridgeNative.Host {
         }
         // 双通道桥：AndroidBridge(自营,绝对可靠) 优先 + FridgeNative(Cap 插件) 兜底
         val b = bridge ?: return
+        // 缓存根修(2026-09-04): 本页永远由本地服务现读+no-store; WebView 侧再禁用缓存双保险
+        try { wv.settings.cacheMode = android.webkit.WebSettings.LOAD_NO_CACHE } catch (_: Exception) {}
+        if (!cacheBustDone) {
+            cacheBustDone = true
+            // 首次加载发生在 cacheMode 生效前(可能命中旧缓存): 立即用无缓存策略重取一次
+            wv.postDelayed({ try { wv.reload() } catch (_: Exception) {} }, 250)
+        }
         wv.addJavascriptInterface(b, "AndroidBridge")
         pushInsets()
         wv.evaluateJavascript("window.setAppTheme(${SkinManager.darkMode.value})", null)
