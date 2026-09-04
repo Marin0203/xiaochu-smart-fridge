@@ -10,5 +10,6 @@ class SmartFridgeApp : Application() {
     override fun onCreate() {
         super.onCreate()
         SkinManager.init(this) // 皮肤选择持久化
+        com.smartfridge.app.domain.PreservationTable.init(this) // 保质期表 V4(xlsx权威表)
     }
 }

@@ -246,6 +246,33 @@ class SyncService(
         db.setMeta("shelf_v3_done_1", "1")
     }
 
+    /** 保质期 V4 校准迁移(2026-09-05): 权威表(assets/preservation.json, 835条)覆盖存量
+     *  已知名称的 shelfLifeDays(可升可降); 未收录名称走 FreshnessTable 正则兜底; 全空保持原值 */
+    suspend fun upgradeShelfV4() {
+        if (db.getMeta("shelf_v4_done_1") == "1") return
+        val items = items.value
+        if (items.isEmpty()) {
+            android.util.Log.i("XC_TRACE", "shelf-v4: items 未加载, 下次重试")
+            return
+        }
+        val updated = mutableListOf<Pair<Ingredient, Int>>()
+        for (i in items) {
+            val t = com.smartfridge.app.domain.PreservationTable.daysForCalib(i.name, i.zone.db) ?: continue
+            if (t != i.shelfLifeDays) updated.add(i to t)
+        }
+        android.util.Log.i("XC_TRACE", "shelf-v4: updated=${updated.size} (${updated.take(12).joinToString { "${it.first.name}:${it.first.shelfLifeDays}->${it.second}" }})")
+        if (updated.isNotEmpty()) {
+            for ((i, days) in updated) {
+                val n = i.copyWith(shelfLifeDays = days, updatedAt = Instant.now())
+                db.upsertIngredient(n)
+                db.enqueueOutbox(i.id, "upsert", n.toJsonObject().toString())
+            }
+            emit()
+            pushQuietly()
+        }
+        db.setMeta("shelf_v4_done_1", "1")
+    }
+
     /** 重新编辑食材 (名称/数量/单位/分区/类别), 全家实时同步 */
     suspend fun updateIngredient(
         id: String,

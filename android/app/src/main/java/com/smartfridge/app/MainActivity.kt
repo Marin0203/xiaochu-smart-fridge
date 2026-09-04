@@ -100,6 +100,7 @@ class MainActivity : BridgeActivity(), FridgeNative.Host {
                         // 保质期 v2 迁移(一次性): 等 items 加载完成后执行(空则不置标记, 下次重试)
                         lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) { services.sync.upgradeShelfV2() }
                         lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) { services.sync.upgradeShelfV3() }
+                        lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) { services.sync.upgradeShelfV4() }
                     }
                     bridge?.pushAll()
                 }

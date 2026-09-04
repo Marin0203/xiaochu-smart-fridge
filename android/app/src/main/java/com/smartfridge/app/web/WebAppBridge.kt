@@ -159,10 +159,10 @@ class WebAppBridge(
         val unit = p["unit"]?.jsonPrimitive?.contentOrNull ?: "个"
         val zone = WebData.zoneFromKey(p["zone"]?.jsonPrimitive?.contentOrNull ?: "chill")
         val tag = p["tag"]?.jsonPrimitive?.contentOrNull
-        // 保质期优先用 AI 识别的 shelfLifeDays(1..3650), 缺省回退保鲜表
+        // 保质期优先用 AI 识别的 shelfLifeDays(1..3650), 缺省回退保鲜表(含 xlsx 权威表)
         val shelf = p["shelfLifeDays"]?.jsonPrimitive?.intOrNull
         val days = if (shelf != null && shelf in 1..3650) shelf
-            else com.smartfridge.app.domain.FreshnessTable.daysFor(name, zone.db) ?: 3
+            else com.smartfridge.app.domain.PreservationTable.daysForCalib(name, zone.db) ?: 3
         val created = services.sync.addDrafts(listOf(IngredientDraft(name, qty, unit, zone, days)), "小厨")
         // 页面自选分类 (tag) 覆盖规则分类 (A 套图标由页面负责, Kotlin 只存数据)
         if (tag != null && tag.isNotBlank()) {
@@ -367,7 +367,8 @@ class WebAppBridge(
                             put("unit", d.unit)
                             put("zone", WebData.zoneKey(d.zone))
                             put("cat", com.smartfridge.app.domain.guessCategoryFor(d.name, d.zone))
-                            put("shelfLifeDays", d.shelfLifeDays)   /* AI 商品保质天 → 页面透传 → add 事件 */
+                            /* AI 保质天 → 权威表(xlsx)覆盖(有则覆盖, 无则保留 AI 值) */
+                            put("shelfLifeDays", com.smartfridge.app.domain.PreservationTable.daysForCalib(d.name, d.zone.db) ?: d.shelfLifeDays)
                         })
                     }
                 })
