@@ -63,6 +63,14 @@ class WebAppBridge(
     // 菜谱缓存: 首次/同步成功后生成, setData 回灌
     @Volatile private var recipesPlan: RecipePlan? = null
 
+    // 菜谱生成模式: 页面「临期优先」开关切换(事件 recipe-mode); 持久化, 下次启动沿用
+    @Volatile private var recipeMode: com.smartfridge.app.domain.RecipeMode = run {
+        val saved = context.getSharedPreferences("settings", android.content.Context.MODE_PRIVATE)
+            .getString("recipe_mode", "normal")
+        com.smartfridge.app.domain.RecipeMode.entries.firstOrNull { it.db == saved }
+            ?: com.smartfridge.app.domain.RecipeMode.NORMAL
+    }
+
     // =====================================================================
     // 页面 → Kotlin
     // =====================================================================
@@ -95,6 +103,7 @@ class WebAppBridge(
                     "pong" -> handlePong(p)
                     "health-check" -> main.launch { handleHealthCheck() }
                     "reminder-settings" -> main.launch { handleReminderSettings(p) }
+                    "recipe-mode" -> main.launch { handleRecipeMode(p) }
                     "edit-fresh" -> main.launch { handleEditFresh(p) }
                 }
             } catch (e: Exception) {
@@ -170,6 +179,18 @@ class WebAppBridge(
         services.sync.refreshFreshness(uuid)
         pushInv()
     }
+    /** 临期优先开关: 记录模式 → 持久化 → 按新模式强制重生成 */
+    private fun handleRecipeMode(p: JsonObject) {
+        val mode = if (p["mode"]?.jsonPrimitive?.contentOrNull == "expiring")
+            com.smartfridge.app.domain.RecipeMode.EXPIRING
+        else com.smartfridge.app.domain.RecipeMode.NORMAL
+        recipeMode = mode
+        context.getSharedPreferences("settings", android.content.Context.MODE_PRIVATE).edit()
+            .putString("recipe_mode", mode.db).apply()
+        Trace.log(context, "recipe-mode: ${mode.db}")
+        refreshRecipesIfNeeded(force = true)
+    }
+
     private fun handleReminderSettings(p: JsonObject) {
         val enabled = p["enabled"]?.jsonPrimitive?.boolean ?: true
         val hours = p["hours"]?.jsonPrimitive?.intOrNull ?: 24
@@ -361,9 +382,13 @@ class WebAppBridge(
         }
         scope.launch {
             val plan = try {
-                val all = services.sync.items.value.map { ExpiringItem.fromIngredient(it) }
+                val items = services.sync.items.value
+                val all = items.map { ExpiringItem.fromIngredient(it) }
+                val wantExpiring = recipeMode == com.smartfridge.app.domain.RecipeMode.EXPIRING
+                val expiring = if (wantExpiring) items.filter { it.freshnessStatus().isAlert }.map { ExpiringItem.fromIngredient(it) } else emptyList()
+                val mode = if (wantExpiring && expiring.isNotEmpty()) com.smartfridge.app.domain.RecipeMode.EXPIRING else com.smartfridge.app.domain.RecipeMode.NORMAL
                 val p = services.ai.recommendRecipes(
-                    emptyList(), all.take(20), RecipeMode.NORMAL,
+                    expiring, all.take(20), mode,
                     avoid = recipesPlan?.recipes?.map { it.title } ?: emptyList(),
                 )
                 Trace.log(context, "recipes: AI ok=${p.ok} count=${p.recipes.size} err=${p.error ?: "-"}")
