@@ -184,7 +184,7 @@ class WebAppBridge(
         services.sync.refreshFreshness(uuid)
         pushInv()
     }
-    /** 临期优先开关: 记录模式 → 持久化 → 按新模式强制重生成 */
+    /** 临期优先开关: 记录模式 → 持久化 → 清空食谱池并按新模式强制重生成(池是模式定制的! 否则切换被池吞) */
     private fun handleRecipeMode(p: JsonObject) {
         val mode = if (p["mode"]?.jsonPrimitive?.contentOrNull == "expiring")
             com.smartfridge.app.domain.RecipeMode.EXPIRING
@@ -192,7 +192,8 @@ class WebAppBridge(
         recipeMode = mode
         context.getSharedPreferences("settings", android.content.Context.MODE_PRIVATE).edit()
             .putString("recipe_mode", mode.db).apply()
-        Trace.log(context, "recipe-mode: ${mode.db}")
+        Trace.log(context, "recipe-mode: ${mode.db} (invalidate pool=${recipePool.size})")
+        recipePool = emptyList()   // 关键: 池是旧模式生成的, 必须作废
         refreshRecipesIfNeeded(force = true)
     }
 
@@ -436,7 +437,7 @@ class WebAppBridge(
             }
             // 一次入池(去重, 至多 30), 随即首发一批
             recipePool = plan.recipes.distinctBy { it.title }.take(30)
-            val batch = recipePool.shuffled().take(BATCH)
+            val batch = releaseBatch()
             val batchPlan = RecipePlan(plan.ok, plan.fromFallback, batch, plan.rawMarkdown, plan.error)
             recipesPlan = batchPlan
             releasedTitles += batchPlan.recipes.map { it.title }
@@ -446,14 +447,34 @@ class WebAppBridge(
         }
     }
 
+    /** 当前临期食材名集合(isAlert=非新鲜) */
+    private fun alertNames(): Set<String> =
+        services.sync.items.value.filter { it.freshnessStatus().isAlert }.map { it.name }.toSet()
+
+    private fun expiringDish(r: Recipe, alert: Set<String>): Boolean =
+        r.uses.any { u -> alert.any { e -> u.contains(e) || e.contains(u) } }
+
+    /** 出一批 5 道: 临期模式下「含临期食材的菜」排前(≤3道)其余随机; 正常模式纯随机乱序 */
+    private fun releaseBatch(): List<Recipe> {
+        val alert = alertNames()
+        val exp = recipePool.filter { expiringDish(it, alert) }
+        val other = recipePool.filterNot { expiringDish(it, alert) }
+        return if (recipeMode == com.smartfridge.app.domain.RecipeMode.EXPIRING && exp.isNotEmpty()) {
+            val n = minOf(3, exp.size)
+            (exp.shuffled().take(n) + other.shuffled().take(BATCH - n)).take(BATCH)
+        } else {
+            recipePool.shuffled().take(BATCH)
+        }
+    }
+
     /** 从 30 道池里随机乱序出 5(不抽走, 循环模式): 无网络, 秒级; 每批独立烘焙(关东煮/徽章) */
     private fun sliceFromPool() {
-        val batch = recipePool.shuffled().take(BATCH)
+        val batch = releaseBatch()
         val plan = RecipePlan(true, false, batch, null, null)
         recipesPlan = plan
         releasedTitles += batch.map { it.title }
         recipesJson = withOden(badgeRecipes(plan))
-        Trace.log(context, "recipes: SLICE from pool(${recipePool.size})")
+        Trace.log(context, "recipes: SLICE from pool(${recipePool.size}) mode=${recipeMode.db}")
         main.launch { pushInvNow() }
     }
 
