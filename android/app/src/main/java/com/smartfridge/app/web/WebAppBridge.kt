@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
+import com.smartfridge.app.UiUpdater
 import androidx.core.content.ContextCompat
 import com.smartfridge.app.ai.localFallbackRecipes
 import com.smartfridge.app.data.AppServices
@@ -107,6 +108,7 @@ class WebAppBridge(
                     "health-check" -> main.launch { handleHealthCheck() }
                     "reminder-settings" -> main.launch { handleReminderSettings(p) }
                     "recipe-mode" -> main.launch { handleRecipeMode(p) }
+                    "check-update" -> main.launch { handleCheckUpdate() }
                     "edit-fresh" -> main.launch { handleEditFresh(p) }
                 }
             } catch (e: Exception) {
@@ -192,6 +194,31 @@ class WebAppBridge(
             .putString("recipe_mode", mode.db).apply()
         Trace.log(context, "recipe-mode: ${mode.db}")
         refreshRecipesIfNeeded(force = true)
+    }
+
+    /** 手动检查更新(设置页「检查更新」按钮): 查服务器 → 有新版本自动拉取并刷新; 无则提示已最新 */
+    private suspend fun handleCheckUpdate() {
+        val cur = try {
+            val jf = java.io.File(context.filesDir, "web/version.json")
+            if (jf.exists()) kotlinx.serialization.json.Json.parseToJsonElement(jf.readText()).jsonObject["ver"]?.jsonPrimitive?.contentOrNull ?: "" else ""
+        } catch (_: Exception) { "" }
+        val v = UiUpdater.checkForUpdate(context, services)
+        if (v != null) {
+            Trace.log(context, "check-update: new $v (cur=$cur)")
+            eval("window.setUiUpdate && window.setUiUpdate({\"cur\":\"$cur\",\"target\":\"$v\",\"state\":\"new\"})")
+            UiUpdater.downloadNow(
+                context, services,
+                onDone = { ver -> main.launch {
+                    android.widget.Toast.makeText(context, "已更新至 v$ver，正在刷新…", android.widget.Toast.LENGTH_SHORT).show()
+                    eval("location.reload()")
+                } },
+                onFail = { msg -> main.launch { android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show() } },
+            )
+        } else {
+            Trace.log(context, "check-update: up to date ($cur)")
+            eval("window.setUiUpdate && window.setUiUpdate({\"cur\":\"$cur\",\"target\":\"\",\"state\":\"ok\"})")
+            main.launch { android.widget.Toast.makeText(context, "已是最新版本", android.widget.Toast.LENGTH_SHORT).show() }
+        }
     }
 
     private fun handleReminderSettings(p: JsonObject) {

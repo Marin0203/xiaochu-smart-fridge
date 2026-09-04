@@ -366,7 +366,10 @@
               </div>
               <div style="display:flex; align-items:center; justify-content:space-between; padding:0 2px">
                 <span id="uiVerState" style="font-size:11.5px; color:var(--ink2)"></span>
-                <button class="pill-btn" id="uiRestartBtn" style="display:none; padding:7px 18px" data-act="upd" onclick="window.uiUpdateTap && window.uiUpdateTap(this)">更新</button>
+                <div style="display:flex; align-items:center; gap:8px">
+                  <button class="pill-btn" id="uiCheckBtn" style="padding:7px 14px; background:var(--glass-strong); color:var(--ink); box-shadow:none; border:1px solid var(--glass-border)" onclick="window.checkUpdate && window.checkUpdate(this)">⟳ 检查更新</button>
+                  <button class="pill-btn" id="uiRestartBtn" style="display:none; padding:7px 18px" data-act="upd" onclick="window.uiUpdateTap && window.uiUpdateTap(this)">更新</button>
+                </div>
               </div>
             </div>
             <div class="set-card" style="cursor:default">
@@ -571,15 +574,16 @@
       (it.days != null ? '<span style="color:var(--ink2)">· 剩 ' + it.days + ' 天</span>' : '') + '</div>' +
       '<div class="fresh" style="--c:' + it.c + ';--w:' + it.w + '%"><i></i></div></div>';
   }
-  var sortMode = 'def';   /* 库存排序: def 默认 / asc 新鲜度低→高(先吃临期) / desc 高→低 */
+  var sortMode = 'name';   /* 库存排序: name 默认按名称 / asc 新鲜度低→高(先吃临期) / desc 高→低 */
   function cycleSort(){
-    sortMode = sortMode === 'def' ? 'asc' : (sortMode === 'asc' ? 'desc' : 'def');
-    toast(sortMode === 'asc' ? '按新鲜度 ↑ 先吃不新鲜的 🌿' : (sortMode === 'desc' ? '按新鲜度 ↓ 后吃不新鲜的' : '已恢复默认顺序'));
-    renderZone();
+    sortMode = sortMode === 'name' ? 'asc' : (sortMode === 'asc' ? 'desc' : 'name');
+    renderZone();   /* 无弹窗提醒, 列表即反馈 */
   }
   function renderZone(){
     var list = visible();
-    if (sortMode !== 'def'){
+    if (sortMode === 'name'){
+      list = list.slice().sort(function(a, b){ return (a.it.n || '').localeCompare(b.it.n || '', 'zh'); });
+    } else if (sortMode !== 'def'){
       var key = function(x){ return x.it.w == null ? 99999 : x.it.w; };  /* 按新鲜度进度条(百分比)排序 */
       list = list.slice().sort(function(a, b){
         var d = key(a) - key(b);
@@ -643,17 +647,14 @@
     btn.classList.add('spin');
     setTimeout(function(){ btn.classList.remove('spin'); toast('库存已同步 ✓ · 数据 30 秒内互通'); }, 900);
   }
-  /* 食谱刷新（按钮行为=最初：转圈→900ms 重渲染；同样通知原生重生成换菜）
-     onClick 已恢复（驱动只匹配 .pill-btn，circle-btn 必须靠 onclick 触发！） */
-  var refreshBusyAt = 0;
+  /* 食谱刷新（右上角专属）: 发桥 refresh → 原生 同步+AI 强制重生成+setData 回灌 */
   function doRefresh(btn){
-    var now = Date.now(); if (now - refreshBusyAt < 1200) return; refreshBusyAt = now;
+    var now = Date.now(); if (now - window.__refreshBusy < 1200) return; window.__refreshBusy = now;
     if (btn.classList.contains('spin')) return;
     btn.classList.add('spin');
     if (window.bridgeMode !== 'demo'){ window.emit('refresh', {}); }
     setTimeout(function(){
-      btn.classList.remove('spin');
-      renderRecipes();
+      btn.classList.remove('spin');   /* 只收转圈; 新批次到来由 setData 一次性渲染(防频闪) */
     }, 900);
   }
 
@@ -1135,6 +1136,13 @@
       btn.disabled = true;
       window.emit('ui-update', {});
     };
+    /* 手动检查更新: 原生核对服务器 → 有新版本则自动拉取并刷新; 无则提示已最新 */
+    window.checkUpdate = function(btn){
+      btn.textContent = '检查中…';
+      btn.disabled = true;
+      window.emit('check-update', {});
+      setTimeout(function(){ try { if (btn){ btn.textContent = '⟳ 检查更新'; btn.disabled = false; } } catch(e){} }, 5000);
+    };
     window.healthTap = function(btn){
       window.emit('trace', {msg: 'healthBtn tapped'});
       btn.textContent = '正在体检…';
@@ -1148,8 +1156,10 @@
     window.bridgeMode = F ? 'capacitor' : (window.AndroidBridge ? 'android' : 'demo');
     window.emit = function(type, payload){
       var json = JSON.stringify(payload || {});
-      if (window.AndroidBridge){ try { window.AndroidBridge.onEvent(type, json); } catch(e){} return; }
-      if (F){ try { F.receiveEvent({type: type, payload: json}); } catch(e){} return; }
+      /* 插件通道优先(2026-09-04): ui-update/page-ready 等特殊事件只在 MainActivity.onCapEvent 处理;
+         AndroidBridge(WebAppBridge) 无这些分支会静默丢弃 → 必须走插件通道, AndroidBridge 仅兜底 */
+      if (F){ try { F.receiveEvent({type: type, payload: json}); return; } catch(e){} }
+      if (window.AndroidBridge){ try { window.AndroidBridge.onEvent(type, json); } catch(e){} }
     };
     window.setData = function(data){
       try {
@@ -1169,7 +1179,7 @@
           });
         }
         renderZone();
-        /* 内容签名守卫: 菜谱数据没变就不重渲染(级联动画只在实际变化时闪一次) */
+        /* 内容签名守卫: 菜谱没变(如回灌相同批次)不重渲染 —— 避免"频闪两下" */
         var rsig = JSON.stringify((rl || []).map(function(r){ return (r.name || r.n) + '=' + (r.badge != null ? r.badge : 0); }));
         if (rsig !== window.__recipesSig){ window.__recipesSig = rsig; renderRecipes(); }
         window.emit('trace', {msg: 'setData ok inv=' + (d.inv ? d.inv.length : 0) +
@@ -1300,7 +1310,7 @@
   /* 按钮 touch 驱动（touchstart 通道已验证可靠；touchend/click 在远程页面被吞） */
   var lastBtnT = 0;
   document.addEventListener('touchstart', function(e){
-    var t = e.target && e.target.closest ? e.target.closest('.pill-btn') : null;
+    var t = e.target && e.target.closest ? e.target.closest('.pill-btn, .circle-btn[data-act]') : null;
     if (!t) return;
     var now = Date.now(); if (now - lastBtnT < 350) return; lastBtnT = now;
     var act = t.getAttribute('data-act');
